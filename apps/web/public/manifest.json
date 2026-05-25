@@ -1,0 +1,8 @@
+{
+  "name": "GrowLab",
+  "short_name": "GrowLab",
+  "display": "standalone",
+  "start_url": "/dashboard",
+  "background_color": "#101613",
+  "theme_color": "#17211c"
+}

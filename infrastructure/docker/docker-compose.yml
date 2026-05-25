@@ -1,0 +1,190 @@
+name: growlab
+
+services:
+  growlab-web:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    container_name: growlab-web
+    restart: unless-stopped
+    environment:
+      GROWLAB_WEB_API_BASE_URL: ${GROWLAB_WEB_API_BASE_URL:-http://growlab-api:8080}
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://app-01:8080}
+    ports:
+      - "${GROWLAB_WEB_PORT:-3000}:3000"
+    depends_on:
+      growlab-api:
+        condition: service_healthy
+    networks:
+      - growlab_net
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  growlab-api:
+    build:
+      context: ../..
+      dockerfile: apps/api/GrowLab.Api/Dockerfile
+    container_name: growlab-api
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      GROWLAB_PERSISTENCE: ${GROWLAB_PERSISTENCE:-Postgres}
+      GROWLAB_DB_HOST: ${GROWLAB_DB_HOST:-pg-01}
+      GROWLAB_DB_PORT: ${GROWLAB_DB_PORT:-5432}
+      GROWLAB_DB_NAME: ${GROWLAB_DB_NAME:-growlab}
+      GROWLAB_DB_USER: ${GROWLAB_DB_USER:-growlab}
+      GROWLAB_DB_PASSWORD: ${GROWLAB_DB_PASSWORD:-change-me}
+      GROWLAB_REDIS_CONNECTION: ${GROWLAB_REDIS_CONNECTION:-growlab-redis:6379}
+      GROWLAB_MQTT_HOST: ${GROWLAB_MQTT_HOST:-growlab-emqx}
+      GROWLAB_MQTT_PORT: ${GROWLAB_MQTT_PORT:-1883}
+      GROWLAB_MQTT_USERNAME: ${GROWLAB_MQTT_USERNAME:-growlab}
+      GROWLAB_MQTT_PASSWORD: ${GROWLAB_MQTT_PASSWORD:-change-me}
+      GROWLAB_AI_SERVICE_URL: ${GROWLAB_AI_SERVICE_URL:-http://growlab-ai:8000}
+      GROWLAB_IMAGE_STORAGE_PATH: /data/images
+      GROWLAB_FEATURE_AUTH: "false"
+      GROWLAB_FEATURE_IRRIGATION_MANUAL: "false"
+      GROWLAB_FEATURE_IRRIGATION_AUTOMATION: "false"
+      GROWLAB_FEATURE_AI_SUGGESTIONS: "true"
+      GROWLAB_FEATURE_AI_CAN_EXECUTE_ACTIONS: "false"
+      GROWLAB_FEATURE_OTA_UPDATES: "true"
+      GROWLAB_FEATURE_SHELLY_LIGHTING: "true"
+      GROWLAB_FEATURE_MQTT_DEVICE_PROVISIONING: "true"
+    ports:
+      - "${GROWLAB_API_PORT:-8080}:8080"
+    volumes:
+      - growlab_images:/data/images
+    depends_on:
+      growlab-ai:
+        condition: service_healthy
+      growlab-emqx:
+        condition: service_healthy
+      growlab-redis:
+        condition: service_healthy
+    networks:
+      - growlab_net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  growlab-worker:
+    build:
+      context: ../..
+      dockerfile: apps/worker/GrowLab.Worker/Dockerfile
+    container_name: growlab-worker
+    restart: unless-stopped
+    environment:
+      GROWLAB_DB_HOST: ${GROWLAB_DB_HOST:-pg-01}
+      GROWLAB_DB_PORT: ${GROWLAB_DB_PORT:-5432}
+      GROWLAB_DB_NAME: ${GROWLAB_DB_NAME:-growlab}
+      GROWLAB_DB_USER: ${GROWLAB_DB_USER:-growlab}
+      GROWLAB_DB_PASSWORD: ${GROWLAB_DB_PASSWORD:-change-me}
+      GROWLAB_PERSISTENCE: ${GROWLAB_PERSISTENCE:-Postgres}
+      GROWLAB_MQTT_HOST: ${GROWLAB_MQTT_HOST:-growlab-emqx}
+      GROWLAB_MQTT_PORT: ${GROWLAB_MQTT_PORT:-1883}
+      GROWLAB_MQTT_USERNAME: ${GROWLAB_MQTT_USERNAME:-growlab}
+      GROWLAB_MQTT_PASSWORD: ${GROWLAB_MQTT_PASSWORD:-change-me}
+      GROWLAB_FEATURE_IRRIGATION_AUTOMATION: "false"
+      GROWLAB_FEATURE_AI_CAN_EXECUTE_ACTIONS: "false"
+      GROWLAB_FEATURE_OTA_UPDATES: "true"
+      GROWLAB_FEATURE_SHELLY_LIGHTING: "true"
+    depends_on:
+      growlab-emqx:
+        condition: service_healthy
+      growlab-redis:
+        condition: service_healthy
+    networks:
+      - growlab_net
+
+  growlab-ai:
+    build:
+      context: ../../apps/ai-service
+      dockerfile: Dockerfile
+    container_name: growlab-ai
+    restart: unless-stopped
+    environment:
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://growlab-ollama:11434}
+      GROWLAB_AI_DEFAULT_MODEL: ${GROWLAB_AI_DEFAULT_MODEL:-qwen2.5vl:7b}
+      GROWLAB_AI_FALLBACK_MODEL: ${GROWLAB_AI_FALLBACK_MODEL:-qwen2.5vl:3b}
+      GROWLAB_IMAGE_STORAGE_PATH: /data/images
+    volumes:
+      - growlab_images:/data/images:ro
+    depends_on:
+      growlab-ollama:
+        condition: service_started
+    networks:
+      - growlab_net
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  growlab-ollama:
+    image: ollama/ollama:latest
+    container_name: growlab-ollama
+    restart: unless-stopped
+    volumes:
+      - growlab_ollama:/root/.ollama
+    networks:
+      - growlab_net
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+
+  growlab-emqx:
+    image: emqx/emqx:5
+    container_name: growlab-emqx
+    restart: unless-stopped
+    environment:
+      EMQX_NAME: growlab-emqx
+    ports:
+      - "${GROWLAB_MQTT_PORT:-1883}:1883"
+      - "${GROWLAB_EMQX_DASHBOARD_PORT:-18083}:18083"
+    volumes:
+      - growlab_emqx_data:/opt/emqx/data
+      - growlab_emqx_log:/opt/emqx/log
+    networks:
+      - growlab_net
+    healthcheck:
+      test: ["CMD", "/opt/emqx/bin/emqx", "ctl", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+
+  growlab-redis:
+    image: redis:8-alpine
+    container_name: growlab-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - growlab_redis:/data
+    networks:
+      - growlab_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+networks:
+  growlab_net:
+    name: growlab_net
+
+volumes:
+  growlab_images:
+    name: growlab_images
+  growlab_ollama:
+    name: growlab_ollama
+  growlab_emqx_data:
+    name: growlab_emqx_data
+  growlab_emqx_log:
+    name: growlab_emqx_log
+  growlab_redis:
+    name: growlab_redis

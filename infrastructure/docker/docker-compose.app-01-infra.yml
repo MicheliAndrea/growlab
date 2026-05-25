@@ -1,0 +1,49 @@
+name: growlab-infra
+
+services:
+  growlab-emqx:
+    image: emqx/emqx:5
+    container_name: growlab-emqx
+    restart: unless-stopped
+    ports:
+      - "${GROWLAB_MQTT_PORT:-1883}:1883"
+      - "${GROWLAB_EMQX_DASHBOARD_PORT:-18083}:18083"
+    volumes:
+      - growlab_emqx_data:/opt/emqx/data
+      - growlab_emqx_log:/opt/emqx/log
+    networks:
+      - growlab_infra_net
+    healthcheck:
+      test: ["CMD", "/opt/emqx/bin/emqx", "ctl", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+
+  growlab-redis:
+    image: redis:8-alpine
+    container_name: growlab-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${GROWLAB_REDIS_PORT:-6379}:6379"
+    volumes:
+      - growlab_redis:/data
+    networks:
+      - growlab_infra_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+networks:
+  growlab_infra_net:
+    name: growlab_infra_net
+
+volumes:
+  growlab_emqx_data:
+    name: growlab_emqx_data
+  growlab_emqx_log:
+    name: growlab_emqx_log
+  growlab_redis:
+    name: growlab_redis
