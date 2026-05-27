@@ -2,6 +2,7 @@
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
+-- +goose StatementBegin
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -11,6 +12,7 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+-- +goose StatementEnd
 
 CREATE TABLE grow_areas (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

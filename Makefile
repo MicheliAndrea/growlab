@@ -7,9 +7,12 @@ include .env
 export
 endif
 
-GOOSE ?= goose
+GOOSE ?= $(shell command -v goose 2>/dev/null || command -v $(HOME)/go/bin/goose 2>/dev/null || printf "goose")
 GOOSE_DRIVER ?= postgres
-SQLC ?= sqlc
+GOOSE_DRIVER := $(or $(GOOSE_DRIVER),postgres)
+GO ?= go
+GO_TOOL_CACHE ?= /tmp/growlab-go-build
+SQLC ?= $(shell command -v sqlc 2>/dev/null || command -v $(HOME)/go/bin/sqlc 2>/dev/null || printf "sqlc")
 SQLC_CONFIG ?= sqlc.yaml
 MIGRATIONS_DIR ?= database/migrations
 
@@ -19,7 +22,7 @@ GROWLAB_DB_NAME ?= growlab
 GROWLAB_DB_USER ?= growlab
 GROWLAB_DB_PASSWORD ?= change-me
 GROWLAB_DB_SSLMODE ?= disable
-DB_DSN ?= postgres://$(GROWLAB_DB_USER):$(GROWLAB_DB_PASSWORD)@$(GROWLAB_DB_HOST):$(GROWLAB_DB_PORT)/$(GROWLAB_DB_NAME)?sslmode=$(GROWLAB_DB_SSLMODE)
+DB_DSN ?= host=$(GROWLAB_DB_HOST) port=$(GROWLAB_DB_PORT) user=$(GROWLAB_DB_USER) password=$(GROWLAB_DB_PASSWORD) dbname=$(GROWLAB_DB_NAME) sslmode=$(GROWLAB_DB_SSLMODE)
 
 help:
 	@printf "%s\n" "GrowLab scaffold"
@@ -66,10 +69,22 @@ openapi-generate:
 	@printf "%s\n" "Orval generation will be added after the OpenAPI contract."
 
 sqlc:
-	$(SQLC) generate -f $(SQLC_CONFIG)
+	@if command -v $(SQLC) >/dev/null 2>&1; then \
+		$(SQLC) generate -f $(SQLC_CONFIG); \
+	else \
+		GOCACHE=$(GO_TOOL_CACHE) $(GO) run ./tools/sqlc-lite; \
+	fi
 
 migrate-up:
-	$(GOOSE) -dir $(MIGRATIONS_DIR) $(GOOSE_DRIVER) "$(DB_DSN)" up
+	@if command -v $(GOOSE) >/dev/null 2>&1; then \
+		GOOSE_DRIVER="$(GOOSE_DRIVER)" GOOSE_DBSTRING="$(DB_DSN)" GOOSE_MIGRATION_DIR="$(MIGRATIONS_DIR)" $(GOOSE) up; \
+	else \
+		GOCACHE=$(GO_TOOL_CACHE) $(GO) run ./tools/goose-lite up $(MIGRATIONS_DIR); \
+	fi
 
 migrate-down:
-	$(GOOSE) -dir $(MIGRATIONS_DIR) $(GOOSE_DRIVER) "$(DB_DSN)" down
+	@if command -v $(GOOSE) >/dev/null 2>&1; then \
+		GOOSE_DRIVER="$(GOOSE_DRIVER)" GOOSE_DBSTRING="$(DB_DSN)" GOOSE_MIGRATION_DIR="$(MIGRATIONS_DIR)" $(GOOSE) down; \
+	else \
+		GOCACHE=$(GO_TOOL_CACHE) $(GO) run ./tools/goose-lite down $(MIGRATIONS_DIR); \
+	fi

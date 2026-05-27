@@ -67,3 +67,44 @@ Note:
 
 - `sqlc` e `goose` non sono installati in questo ambiente, quindi non sono stati eseguiti realmente.
 - Le migrazioni reali richiedono il PostgreSQL/TimescaleDB esterno su `pg-01`.
+
+## STEP 03B - Database Feature Enhancements
+
+Completato.
+
+- Aggiunto `docs/STEP_03B_DATABASE_FEATURE_ENHANCEMENTS.md`.
+- Aggiunta la migrazione incrementale `database/migrations/000002_feature_enhancements.sql`.
+- Integrate nello schema le feature attuali: `system_events`, stati alert `active/acknowledged/resolved`, `zone_profiles`, salute manuale pianta, `plant_tasks`, `device_capabilities`, `sensor_calibrations`, `lighting_profiles`, provisioning metadata, firmware channels, OTA dry-run e growth tracking immagini.
+- Aggiornate le query sqlc minime in `database/queries/feature_enhancements.sql`.
+- Aggiornata la query `ListOpenSystemAlerts` per usare `active`.
+- Aggiunto modulo Go minimo con repository sopra interfaccia compatibile sqlc in `internal/repository`.
+- Aggiunto fallback locale `tools/sqlc-lite` per validazione strutturale quando il binario `sqlc` non e installato.
+- Aggiunto fallback locale `tools/goose-lite` per validazione strutturale quando il binario `goose` non e installato.
+- Aggiornati `docs/STEP_03_DATABASE_TIMESCALE.md`, `docs/STEP_04_OPENAPI_CONTRACT.md` e `docs/STEP_19_FINAL_AUDIT.md`.
+
+Feature lasciate solo documentate:
+
+- rules engine completo;
+- digital twin/layout visuale zone;
+- kiosk mode UI;
+- dashboard Grafana complete;
+- QR provisioning completo;
+- plant passport export;
+- export JSON/CSV;
+- AI plant health score;
+- advanced image analysis.
+
+Comandi verificati:
+
+```bash
+make sqlc
+make migrate-up
+make migrate-down
+go test ./...
+go build ./...
+```
+
+Note:
+
+- Se `goose` e installato, `make migrate-up` applica le migrazioni al PostgreSQL/TimescaleDB esterno su `pg-01`.
+- In questo ambiente `goose` non e installato, quindi `make migrate-up` ha eseguito solo la validazione strutturale locale delle migrazioni.

@@ -26,4 +26,4 @@ SELECT * FROM irrigation_systems WHERE id = $1;
 SELECT * FROM irrigation_systems WHERE zone_id = $1 ORDER BY name;
 
 -- name: ListOpenSystemAlerts :many
-SELECT * FROM system_alerts WHERE status = 'open' ORDER BY raised_at DESC;
+SELECT * FROM system_alerts WHERE status = 'active' ORDER BY raised_at DESC;
