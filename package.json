@@ -1,0 +1,13 @@
+{
+  "name": "growlab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "openapi:generate": "pnpm --filter @growlab/openapi-client generate"
+  },
+  "devDependencies": {
+    "orval": "^7.11.2",
+    "prettier": "^3.8.3"
+  }
+}

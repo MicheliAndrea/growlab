@@ -65,7 +65,6 @@ rg -n "jsonb" database/migrations/000001_init_schema.sql
 
 Note:
 
-- `sqlc` e `goose` non sono installati in questo ambiente, quindi non sono stati eseguiti realmente.
 - Le migrazioni reali richiedono il PostgreSQL/TimescaleDB esterno su `pg-01`.
 
 ## STEP 03B - Database Feature Enhancements
@@ -107,4 +106,77 @@ go build ./...
 Note:
 
 - Se `goose` e installato, `make migrate-up` applica le migrazioni al PostgreSQL/TimescaleDB esterno su `pg-01`.
-- In questo ambiente `goose` non e installato, quindi `make migrate-up` ha eseguito solo la validazione strutturale locale delle migrazioni.
+- Il Makefile rileva anche binari installati con `go install` in `$HOME/go/bin`.
+
+## STEP 04 - OpenAPI Contract
+
+Completato.
+
+- Aggiornato `openapi/growlab.openapi.yaml` come source of truth OpenAPI 3.0.3.
+- Aggiunti gli endpoint minimi di STEP 04 per health, zone, piante, device, luci, firmware e irrigazione disabilitata.
+- Integrati nel contratto i moduli STEP 03B: system events, system alerts, zone profiles, plant tasks, device capabilities, sensor calibrations, lighting profiles, firmware channels, OTA dry-run, provisioning metadata e growth tracking immagini.
+- Aggiunte response standard `BadRequest` e `NotFound`.
+- Definita `IrrigationDisabledResponse` con codice `IRRIGATION_DISABLED`.
+- Aggiunto `orval.config.ts` per generare il client TypeScript in `packages/openapi-client`.
+- Aggiunto `packages/openapi-client/package.json` e mutator fetch `packages/openapi-client/src/runtime/fetcher.ts`.
+- Aggiunto workspace pnpm root e lockfile.
+- Collegato `make openapi-generate` a validazione YAML e Orval.
+
+Comandi verificati:
+
+```bash
+make openapi-generate
+python3 - <<'PY'
+import yaml
+from pathlib import Path
+spec = yaml.safe_load(Path('openapi/growlab.openapi.yaml').read_text())
+print(spec['openapi'])
+print(len(spec['paths']))
+print(len(spec['components']['schemas']))
+PY
+python3 -c "import yaml; yaml.safe_load(open('openapi/growlab.openapi.yaml'))"
+make sqlc
+go test ./...
+go build ./...
+```
+
+Note:
+
+- Orval genera il client sotto `packages/openapi-client/src/generated`, ignorato da git come artifact generato.
+
+## STEP 05 - Go API Foundation
+
+Completato.
+
+- Aggiunta foundation API Go + Gin in `apps/api`.
+- Aggiunto entrypoint `apps/api/cmd/api/main.go`.
+- Aggiunta configurazione env in `apps/api/internal/config`.
+- Aggiunta connessione PostgreSQL via `pgxpool`.
+- Aggiunta connessione Redis opzionale.
+- Aggiunto router Gin con CORS locale, recovery, `GET /api/health` e `GET /metrics`.
+- Aggiunto modello errore JSON standard.
+- Aggiunte metriche Prometheus minime:
+  - `growlab_api_requests_total`
+  - `growlab_api_request_duration_seconds`
+  - `growlab_api_errors_total`
+  - `growlab_api_build_info`
+- Aggiunto graceful shutdown con `slog`.
+- Aggiornato `apps/api/Dockerfile` per buildare il binario API.
+- Collegato `make dev-api` al server API.
+- Lasciati `make build`, `make test` e `make lint` come target non pesanti per evitare compilazioni globali accidentali.
+
+Verifiche leggere eseguite:
+
+```bash
+python3 - <<'PY'
+# verifica struttura file STEP 05
+PY
+rg -n "GET\\(\"/api/health\"|GET\\(\"/metrics\"|cors\\.New|slog|signal\\.NotifyContext|OpenPostgres|OpenRedis|growlab_api_requests_total|growlab_api_request_duration_seconds|growlab_api_errors_total|growlab_api_build_info" apps/api
+gofmt -w apps/api/cmd/api/main.go apps/api/internal/config/config.go apps/api/internal/database/postgres.go apps/api/internal/database/redis.go apps/api/internal/handlers/errors.go apps/api/internal/handlers/health.go apps/api/internal/http/router.go apps/api/internal/http/router_test.go apps/api/internal/metrics/metrics.go apps/api/internal/middleware/metrics.go
+git diff --check
+```
+
+Note:
+
+- Per scelta operativa non sono stati eseguiti `go build ./...`, `go test ./...`, `make build` o `make test`, per evitare compilazioni globali pesanti.
+- Il modulo Go resta root-level (`go.mod` alla radice) invece di creare un modulo annidato in `apps/api`, cosi il monorepo mantiene un solo modulo Go fino a diversa decisione architetturale.

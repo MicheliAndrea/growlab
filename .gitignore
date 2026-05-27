@@ -34,8 +34,7 @@ __pycache__/
 firmware/**/.pio/
 
 # Generated artifacts
-packages/openapi-client/*
-!packages/openapi-client/.gitkeep
+packages/openapi-client/src/generated/
 
 # Local runtime data
 storage/

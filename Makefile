@@ -12,9 +12,11 @@ GOOSE_DRIVER ?= postgres
 GOOSE_DRIVER := $(or $(GOOSE_DRIVER),postgres)
 GO ?= go
 GO_TOOL_CACHE ?= /tmp/growlab-go-build
+PNPM ?= pnpm
 SQLC ?= $(shell command -v sqlc 2>/dev/null || command -v $(HOME)/go/bin/sqlc 2>/dev/null || printf "sqlc")
 SQLC_CONFIG ?= sqlc.yaml
 MIGRATIONS_DIR ?= database/migrations
+OPENAPI_SPEC ?= openapi/growlab.openapi.yaml
 
 GROWLAB_DB_HOST ?= pg-01
 GROWLAB_DB_PORT ?= 5432
@@ -48,25 +50,30 @@ dev-web:
 	@printf "%s\n" "Web app dev command will be wired in STEP 08."
 
 dev-api:
-	@printf "%s\n" "Go API dev command will be wired in STEP 05."
+	$(GO) run ./apps/api/cmd/api
 
 dev-worker:
 	@printf "%s\n" "Go worker dev command will be wired in STEP 07."
 
 build:
-	@printf "%s\n" "Build commands will be wired in later steps."
+	@printf "%s\n" "Build is intentionally manual. Run a targeted go build only when explicitly needed."
 
 test:
-	@printf "%s\n" "Tests will be wired in later steps."
+	@printf "%s\n" "Tests are intentionally manual. Run targeted go test packages only when explicitly needed."
 
 lint:
-	@printf "%s\n" "Lint commands will be wired in later steps."
+	@printf "%s\n" "Lint command will be wired after tool choice; no global compile is run here."
 
 docker-config:
 	docker compose -f infrastructure/docker/docker-compose.yml config
 
 openapi-generate:
-	@printf "%s\n" "Orval generation will be added after the OpenAPI contract."
+	@python3 -c 'import yaml; yaml.safe_load(open("$(OPENAPI_SPEC)", encoding="utf-8"))'
+	@if command -v $(PNPM) >/dev/null 2>&1; then \
+		$(PNPM) --filter @growlab/openapi-client generate; \
+	else \
+		printf "%s\n" "pnpm not found; OpenAPI YAML validated, Orval generation skipped."; \
+	fi
 
 sqlc:
 	@if command -v $(SQLC) >/dev/null 2>&1; then \
