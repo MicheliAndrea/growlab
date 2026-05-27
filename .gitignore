@@ -11,13 +11,18 @@
 node_modules/
 .next/
 out/
+dist/
+build/
+coverage/
 npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# .NET
+# Go
 bin/
-obj/
-*.user
-*.suo
+coverage.out
+*.test
 
 # Python
 __pycache__/
@@ -26,7 +31,14 @@ __pycache__/
 
 # PlatformIO
 .pio/
+firmware/**/.pio/
+
+# Generated artifacts
+packages/openapi-client/*
+!packages/openapi-client/.gitkeep
 
 # Local runtime data
 storage/
+data/
+tmp/
 *.log

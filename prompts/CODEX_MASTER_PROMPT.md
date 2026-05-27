@@ -1,50 +1,49 @@
-# Codex Master Prompt — GrowLab
+# Codex Master Prompt — GrowLab Hybrid Edition
 
-Devi implementare il progetto **GrowLab** seguendo tutta la documentazione nella cartella `docs`.
+Devi creare GrowLab usando documentazione step-by-step.
 
-## Contesto
+## Stack obbligatorio
 
-GrowLab è una piattaforma self-hosted per home lab per gestione piante, zone, ESP32, MQTT, Shelly Dimmer 2, upload immagini, analisi AI locale con Ollama e predisposizione OTA/irrigazione.
-
-## Vincoli obbligatori
-
-- Monorepo.
-- Frontend Next.js App Router + TypeScript + TailwindCSS + shadcn/ui.
-- Backend .NET 10 Web API.
-- Worker .NET 10.
-- AI service Python FastAPI.
-- Database PostgreSQL + TimescaleDB su host esterno `pg-01`.
-- Runtime Docker Compose su `app-01`.
-- MQTT con EMQX.
-- Storage immagini su volume Docker.
-- Firmware ESP32 unico con PlatformIO + Arduino.
-- AI solo consultiva.
-- Irrigazione predisposta ma disabilitata.
-- Nessuna autenticazione nella prima versione.
-- Accesso solo LAN/VPN.
-- Nessun secret hardcoded.
-
-## Prima di scrivere codice
-
-Leggi in ordine:
-
-1. `docs/00_PROJECT_GUIDELINES.md`
-2. `docs/01_ARCHITECTURE_OVERVIEW.md`
-3. `docs/02_MONOREPO_STRUCTURE.md`
-4. `docs/18_DEVELOPMENT_TASKS.md`
-
-## Output atteso
-
-Genera codice incrementale, pulito e commentato dove serve.
-
-Ogni modulo deve essere funzionante o avere placeholder espliciti.
+- Backend API: Go + Gin
+- Worker: Go separato
+- Frontend: Next.js App Router + TypeScript
+- UI: shadcn/ui + TailwindCSS
+- API: REST + OpenAPI
+- TS client: Orval
+- Package manager frontend: pnpm
+- DB: PostgreSQL + TimescaleDB esterno su pg-01
+- DB access: pgx + sqlc
+- Migrazioni: goose
+- MQTT: EMQX
+- Cache: Redis
+- Lighting: Shelly Dimmer 2 local HTTP API
+- Firmware: ESP32 PlatformIO + Arduino
+- Deploy: Docker Compose su app-01
+- Monitoring: mon-01 con Grafana, Prometheus, Loki, Alloy
 
 ## Regole
 
-- Non implementare irrigazione attiva.
-- Non permettere all’AI di eseguire comandi.
-- Non usare servizi cloud obbligatori.
-- Non salvare immagini in database.
-- Non introdurre auth nella prima versione, ma non impedire futura auth.
-- Usare environment variables.
-- Aggiornare README quando aggiungi moduli.
+- Procedi uno step alla volta.
+- Non implementare AI ora.
+- Non implementare autenticazione.
+- Non attivare irrigazione.
+- Non usare GORM.
+- Non usare tRPC.
+- Non usare GraphQL.
+- Non usare backend Next.js per business logic.
+- Non salvare immagini nel DB.
+- Non containerizzare PostgreSQL principale.
+- Esporre /metrics su API e Worker.
+- Frontend usa solo OpenAPI generated client.
+- Realtime MVP con polling.
+- Notifiche MVP solo web.
+
+## Primo compito
+
+Leggi:
+
+1. docs/STEP_00_PROJECT_OVERVIEW.md
+2. docs/DECISIONS.md
+3. docs/STEP_01_MONOREPO_SETUP.md
+
+Poi implementa solo STEP 01.
