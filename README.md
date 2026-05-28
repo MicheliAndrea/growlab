@@ -1,8 +1,33 @@
-# GrowLab
+<h1 align="center">GrowLab</h1>
+
+<p align="center">
+  Local-first plant, IoT and homelab control platform.
+</p>
+
+<p align="center">
+  <img alt="Status" src="https://img.shields.io/badge/status-MVP%20local%20advanced-2f855a">
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-2563eb">
+  <img alt="Open Source" src="https://img.shields.io/badge/open%20source-yes-111827">
+  <img alt="Stack" src="https://img.shields.io/badge/stack-Go%20%2B%20Next.js%20%2B%20TimescaleDB-0f766e">
+</p>
+
+---
 
 GrowLab e una piattaforma locale per homelab dedicata alla gestione di piante, zone di coltivazione, sensori IoT, luci, immagini, firmware ESP32 e dati storici su TimescaleDB.
 
 Il progetto nasce per girare in LAN/VPN, con servizi separati per applicazione, database e monitoring. L'obiettivo non e creare una piattaforma cloud generica, ma un sistema controllabile, ispezionabile e sicuro per un homelab reale.
+
+## Visione
+
+```text
+Plant care + IoT telemetry + local operations + homelab observability
+```
+
+GrowLab prova a tenere insieme tre mondi:
+
+- cura e storico delle piante;
+- sensoristica e firmware ESP32;
+- gestione locale e osservabilita da homelab.
 
 ## Stato del progetto
 
@@ -36,6 +61,24 @@ Restano volutamente non attivi:
 - export avanzati.
 
 ## Architettura
+
+```mermaid
+flowchart TD
+    Browser["Browser"] --> Web["Next.js Web App"]
+    Web --> API["Go Gin API"]
+    API --> DB["PostgreSQL / TimescaleDB<br/>pg-01"]
+    API --> Redis["Redis"]
+    API --> Storage["Image + Firmware volumes"]
+    API --> Shelly["Shelly Dimmer 2<br/>local HTTP"]
+    Worker["Go MQTT Worker"] --> DB
+    Worker --> EMQX["EMQX MQTT"]
+    ESP32["ESP32 devices"] --> EMQX
+    EMQX --> Worker
+    API --> Metrics["/metrics"]
+    Worker --> WorkerMetrics["/metrics"]
+    Metrics --> Monitoring["homelab-monitoring repo<br/>Grafana + Prometheus + Loki + Alloy"]
+    WorkerMetrics --> Monitoring
+```
 
 ```text
 Browser
@@ -85,6 +128,39 @@ repo separata: /home/andrea/projects/homelab-monitoring
 | Lighting         | Shelly Dimmer 2 local HTTP API                         |
 | Deploy app       | Docker Compose su `app-01`                             |
 | Monitoring       | Repo separata su `mon-01`                              |
+
+## Project map
+
+```mermaid
+mindmap
+  root((GrowLab))
+    Web
+      Dashboard
+      Plants
+      Zones
+      Devices
+      Lighting
+      Firmware
+    API
+      REST
+      OpenAPI
+      Safety guardrails
+    Worker
+      MQTT telemetry
+      Heartbeats
+      OTA status
+    Database
+      TimescaleDB
+      sqlc
+      goose
+    Firmware
+      ESP32
+      PlatformIO
+    Homelab
+      Docker Compose
+      Backups
+      External monitoring
+```
 
 ## Moduli principali
 
@@ -333,6 +409,21 @@ Vedi:
 - `.env` e backup vanno trattati come segreti.
 - Irrigazione e AI restano disabilitate.
 
+## Open source
+
+GrowLab e un progetto open source rilasciato sotto licenza MIT.
+
+Questo significa che puoi usarlo, studiarlo, modificarlo e redistribuirlo, inclusi fork personali o adattamenti per il tuo homelab. Il progetto resta comunque pensato per ambienti locali e richiede una configurazione consapevole prima di essere esposto in rete.
+
+Contributi utili:
+
+- bug report riproducibili;
+- miglioramenti alla documentazione;
+- dashboard o pannelli operativi;
+- integrazioni con nuovi sensori;
+- hardening deploy;
+- test mirati su API, worker e frontend.
+
 ## Documentazione
 
 Documenti principali:
@@ -353,4 +444,4 @@ Roadmap/future:
 
 ## Licenza
 
-Licenza non ancora specificata.
+MIT. Vedi [LICENSE](LICENSE).
