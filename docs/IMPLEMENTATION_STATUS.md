@@ -180,3 +180,574 @@ Note:
 
 - Per scelta operativa non sono stati eseguiti `go build ./...`, `go test ./...`, `make build` o `make test`, per evitare compilazioni globali pesanti.
 - Il modulo Go resta root-level (`go.mod` alla radice) invece di creare un modulo annidato in `apps/api`, cosi il monorepo mantiene un solo modulo Go fino a diversa decisione architetturale.
+
+## STEP 06 - Go API Domain
+
+Completato.
+
+- Collegato il domain handler all'entrypoint API.
+- Aggiunto repository DB minimale in `apps/api/internal/repositories`, con normalizzazione record verso JSON e campi camelCase.
+- Aggiunto service domain in `apps/api/internal/services/domain.go`.
+- Aggiunti handler sottili in `apps/api/internal/handlers/domain.go`.
+- Registrate le rotte domain in `apps/api/internal/http/router.go`.
+- Coperti i moduli principali: zone, zone profiles, piante, plant timeline, Plant Wiki, immagini metadata, plant tasks, system events, system alerts, device capabilities, provisioning metadata, sensor calibrations, lighting systems/profiles, firmware metadata, OTA metadata e irrigation disabled.
+- Allineato OpenAPI con le rotte Plant Wiki e con `growAreaId` obbligatorio per le zone, coerente con il vincolo DB.
+- Il provisioning device non espone `token_hash` nelle risposte API.
+- Il modulo irrigazione continua a non avviare nulla: `POST /api/irrigation/{id}/manual-run` ritorna `IRRIGATION_DISABLED`.
+
+Verifiche leggere eseguite:
+
+```bash
+gofmt -w apps/api/cmd/api/main.go apps/api/internal/repositories/repository.go apps/api/internal/services/domain.go apps/api/internal/handlers/domain.go apps/api/internal/http/router.go
+python3 -c "import yaml; yaml.safe_load(open('openapi/growlab.openapi.yaml')); print('openapi yaml ok')"
+make openapi-generate
+git diff --check
+```
+
+Note:
+
+- Per scelta operativa non sono stati eseguiti `go build ./...`, `go test ./...`, `make build` o `make test`.
+
+## STEP 07 - Go Worker MQTT
+
+Completato.
+
+- Aggiunto worker Go separato in `workers/growlab-worker`.
+- Aggiunto entrypoint `workers/growlab-worker/cmd/worker/main.go`.
+- Aggiunti package worker per config, metrics, MQTT client, processor payload e store PostgreSQL.
+- Il worker si connette a EMQX via Paho MQTT e sottoscrive:
+  - `growlab/devices/+/telemetry`
+  - `growlab/devices/+/heartbeat`
+  - `growlab/devices/+/status`
+  - `growlab/devices/+/ota/status`
+- Implementato parsing JSON e validazione payload.
+- Implementato salvataggio `sensor_readings`.
+- Implementato salvataggio `device_heartbeats`.
+- Aggiunta migrazione `database/migrations/000003_worker_mqtt_ingestion.sql` per `devices.last_seen_at`.
+- Implementato aggiornamento `devices.last_seen_at`, `devices.status` e `devices.firmware_version` dai messaggi MQTT.
+- Implementato aggiornamento metadata/stato OTA job da topic `ota/status`.
+- Aggiunte metriche Prometheus worker:
+  - `growlab_worker_mqtt_messages_total`
+  - `growlab_worker_mqtt_errors_total`
+  - `growlab_worker_mqtt_processing_duration_seconds`
+  - `growlab_worker_build_info`
+- Aggiornato `workers/growlab-worker/Dockerfile`.
+- Collegato `make dev-worker` al comando worker.
+- Aggiornato OpenAPI `Device` con `lastSeenAt`.
+
+Verifiche leggere eseguite:
+
+```bash
+gofmt -w workers/growlab-worker/cmd/worker/main.go workers/growlab-worker/internal/config/config.go workers/growlab-worker/internal/metrics/metrics.go workers/growlab-worker/internal/mqtt/client.go workers/growlab-worker/internal/processor/processor.go workers/growlab-worker/internal/store/store.go
+make sqlc
+GOPROXY=off GOCACHE=/tmp/growlab-go-build go list ./workers/growlab-worker/...
+make openapi-generate
+```
+
+Note:
+
+- Per scelta operativa non sono stati eseguiti `go build ./...`, `go test ./...`, `make build` o `make test`.
+- `go mod tidy` e stato eseguito solo per riallineare `go.mod`/`go.sum` alla nuova dipendenza MQTT.
+
+## STEP 08 - Next.js Foundation
+
+Completato.
+
+- Creata app Next.js App Router in `apps/web`.
+- Configurati TypeScript strict, TailwindCSS, PostCSS, ESLint flat config e Next standalone output.
+- Aggiunto `components.json` per shadcn/ui.
+- Aggiunti componenti UI locali shadcn-style: button, card, badge, input, label e chart wrapper.
+- Aggiunto provider TanStack Query in `apps/web/app/providers.tsx`.
+- Aggiunta predisposizione React Hook Form + Zod con schema base in `apps/web/lib/forms.ts`.
+- Aggiunta predisposizione Recharts con `MiniLineChart`.
+- Aggiunto import del client Orval in `apps/web/lib/api.ts`.
+- Aggiornato runtime fetcher Orval per la firma generata da Orval.
+- Aggiunta predisposizione WASM in `apps/web/lib/wasm`.
+- Aggiornato `apps/web/Dockerfile` con build standalone.
+- Collegato `make dev-web` a `pnpm --filter @growlab/web dev`.
+- Aggiornato workspace pnpm e lockfile con le dipendenze web.
+
+Verifiche leggere eseguite:
+
+```bash
+pnpm exec prettier --write apps/web package.json packages/openapi-client/src/runtime/fetcher.ts pnpm-workspace.yaml
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+pnpm --filter @growlab/web exec eslint .
+pnpm --dir apps/web exec next dev --hostname 127.0.0.1 --port 3000
+curl -I http://127.0.0.1:3000
+```
+
+Note:
+
+- Per scelta operativa non sono stati eseguiti `pnpm --filter @growlab/web build`, `make build` o build globali.
+- Il dev server avviato per la verifica STEP 08 e stato fermato prima dello STEP 09.
+
+## STEP 09 - Next.js Dashboard UI
+
+Completato.
+
+- Aggiunta dashboard condivisa per `/` e `/dashboard`.
+- Aggiornato `AppShell` con navigazione reale desktop/mobile verso tutte le pagine STEP 09.
+- Aggiunte pagine operative:
+  - `/plants`
+  - `/zones`
+  - `/devices`
+  - `/lighting`
+  - `/images`
+  - `/firmware`
+  - `/settings`
+- Aggiunto layer query TanStack in `apps/web/lib/queries.ts` sopra il client OpenAPI/Orval.
+- Aggiunto polling frontend:
+  - 30 secondi per health, zone, piante, device, luci, firmware e timeline.
+  - 15 secondi per alert attivi.
+- Aggiunti componenti dashboard riusabili per header, metriche, pannelli, righe, badge, stati loading/error/empty.
+- Implementato Alert MVP nella dashboard web con acknowledge/resolve.
+- Aggiunti grafici dashboard Recharts per carico operativo, distribuzione risorse, alert, salute piante, stato device e severita eventi.
+- Rivisto design system generale con token CSS light/dark e variabili chart.
+- Aggiunto selettore tema `Light / Dark / System`, persistito in `localStorage`.
+- Allineato il runtime fetcher Orval al default API locale `http://localhost:8080` quando `NEXT_PUBLIC_API_BASE_URL` non e impostata.
+
+Verifiche leggere eseguite:
+
+```bash
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+pnpm --filter @growlab/web exec eslint .
+pnpm exec prettier --write apps/web/app apps/web/components apps/web/lib packages/openapi-client/src/runtime/fetcher.ts
+git diff --check
+```
+
+Note:
+
+- Per scelta operativa non sono stati eseguiti `pnpm --filter @growlab/web build`, `make build` o build globali.
+- Il dev server Next.js non e stato riavviato dopo lo stop richiesto.
+
+## STEP 10 - Plants, Zones, History
+
+Completato.
+
+- Confermati CRUD zones e plants gia esposti dallo STEP 06.
+- Aggiunti endpoint plant events:
+  - `GET /api/plants/{id}/events`
+  - `POST /api/plants/{id}/events`
+- Aggiornato OpenAPI con `PlantEvent` e `PlantEventCreateRequest`.
+- Aggiornata query sqlc `CreatePlantEvent`.
+- La creazione pianta registra lo stato salute iniziale in `plant_status_history`.
+- L'update pianta registra una voce history quando cambia `currentHealthStatus`.
+- Aggiunte pagine frontend:
+  - `/zones/new`
+  - `/zones/{id}`
+  - `/zones/{id}/edit`
+  - `/plants/new`
+  - `/plants/{id}`
+  - `/plants/{id}/edit`
+- Aggiornate liste `/zones` e `/plants` con azioni create/open/edit.
+- Aggiunti form create/edit per zone e piante.
+- Aggiunto dettaglio zona con target profiles e piante assegnate.
+- Aggiunto dettaglio pianta con timeline, eventi manuali, checklist e form evento.
+- Aggiunta sezione Plant Wiki base nella lista piante.
+
+Verifiche leggere eseguite:
+
+```bash
+gofmt -w apps/api/internal/http/router.go apps/api/internal/handlers/domain.go apps/api/internal/services/domain.go
+python3 -c "import yaml; yaml.safe_load(open('openapi/growlab.openapi.yaml')); print('openapi yaml ok')"
+make sqlc
+make openapi-generate
+pnpm exec prettier --write apps/web/app apps/web/components apps/web/lib packages/openapi-client/src/generated
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+pnpm --filter @growlab/web exec eslint .
+GOCACHE=/tmp/growlab-go-build go list ./apps/api/...
+git diff --check
+```
+
+Note:
+
+- Per scelta operativa non sono stati eseguiti `go build ./...`, `go test ./...`, `pnpm build`, `make build` o build globali.
+- Il dev server Next.js non e stato riavviato.
+
+## STEP 11 - Images Upload
+
+Completato.
+
+- Aggiunta migrazione `database/migrations/000004_plant_image_zone_association.sql`.
+- `plant_images` ora mantiene `zone_id` storico, backfillato dalla zona corrente della pianta.
+- Aggiunto indice `plant_images_zone_uploaded_idx`.
+- Implementato upload multipart reale in `POST /api/plants/{id}/images`.
+- Validati MIME e dimensione file:
+  - JPEG
+  - PNG
+  - WebP
+  - limite default `15 MiB`, configurabile con `GROWLAB_IMAGE_UPLOAD_MAX_BYTES`.
+- Salvati file su filesystem sotto `GROWLAB_IMAGE_STORAGE_PATH`.
+- Salvati nel DB solo metadata, path relativo e checksum SHA-256.
+- Aggiunto `GET /api/plants/{id}/images` per metadata gallery.
+- Aggiunto `GET /api/images/{id}/file` per servire file immagine in modo controllato.
+- Aggiornato OpenAPI e rigenerato client Orval.
+- Aggiornato fetcher Orval per supportare `FormData` senza forzare header JSON.
+- Aggiunto form upload immagine nel dettaglio pianta.
+- Aggiunta gallery nel dettaglio pianta.
+- Aggiornata pagina `/images` come gallery globale.
+- Aggiornati `.env.example` e Docker Compose con `GROWLAB_IMAGE_UPLOAD_MAX_BYTES`.
+
+Verifiche leggere eseguite:
+
+```bash
+gofmt -w apps/api/cmd/api/main.go apps/api/internal/config/config.go apps/api/internal/handlers/domain.go apps/api/internal/http/router.go apps/api/internal/services/domain.go
+python3 -c "import yaml; yaml.safe_load(open('openapi/growlab.openapi.yaml')); print('openapi yaml ok')"
+make sqlc
+make openapi-generate
+pnpm exec prettier --write apps/web/app apps/web/components apps/web/lib packages/openapi-client/src/runtime/fetcher.ts packages/openapi-client/src/generated infrastructure/docker/docker-compose.yml
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+pnpm --filter @growlab/web exec eslint .
+GOCACHE=/tmp/growlab-go-build go list ./apps/api/...
+git diff --check
+```
+
+Note:
+
+- Per scelta operativa non sono stati eseguiti `go build ./...`, `go test ./...`, `pnpm build`, `make build` o build globali.
+- Il dev server Next.js non e stato riavviato.
+- `prettier` non e stato applicato a `.env.example` perche non ha parser inferibile.
+
+## STEP 12 - Shelly Dimmer 2 Lighting
+
+Completato.
+
+- Aggiunto package Go `apps/api/internal/shelly`.
+- Implementate funzioni Shelly:
+  - `GetState`
+  - `TurnOn`
+  - `TurnOff`
+  - `SetBrightness`
+- Client HTTP con timeout configurabile tramite `GROWLAB_SHELLY_TIMEOUT`.
+- I comandi usano endpoint locale Shelly Dimmer 2 `/light/0`.
+- Aggiunti endpoint API:
+  - `GET /api/lighting/{id}/state`
+  - `GET /api/lighting/{id}/events`
+  - `POST /api/lighting/{id}/on`
+  - `POST /api/lighting/{id}/off`
+  - `POST /api/lighting/{id}/brightness`
+- I comandi ON/OFF/brightness chiamano Shelly solo per sistemi `provider = 'shelly'` con `endpoint_url` configurato.
+- Ogni comando registra una riga in `lighting_events`.
+- I fallimenti comando/stato registrano eventi `*_failed` quando possibile.
+- Aggiornato OpenAPI con `LightingState`, `LightingEvent` e `endpointUrl` su `LightingSystem`.
+- Aggiunta query sqlc `ListLightingEvents`.
+- Aggiornata pagina `/lighting` con card stato, pulsanti ON/OFF, slider brightness, polling e storico eventi.
+- Aggiornati `.env.example` e Docker Compose con `GROWLAB_SHELLY_TIMEOUT`.
+
+Verifiche leggere eseguite:
+
+```bash
+gofmt -w apps/api/cmd/api/main.go apps/api/internal/config/config.go apps/api/internal/shelly/client.go apps/api/internal/services/domain.go apps/api/internal/handlers/domain.go apps/api/internal/http/router.go
+python3 -c "import yaml; yaml.safe_load(open('openapi/growlab.openapi.yaml')); print('openapi yaml ok')"
+make sqlc
+make openapi-generate
+pnpm exec prettier --write apps/web/app/lighting/page.tsx apps/web/components/lighting/lighting-control-card.tsx apps/web/lib/queries.ts packages/openapi-client/src/generated infrastructure/docker/docker-compose.yml
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+pnpm --filter @growlab/web exec eslint .
+GOCACHE=/tmp/growlab-go-build go list ./apps/api/...
+git diff --check
+```
+
+Note:
+
+- Per scelta operativa non sono stati eseguiti `go build ./...`, `go test ./...`, `pnpm build`, `make build` o build globali.
+- Il dev server Next.js non e stato riavviato.
+- `prettier` non e stato applicato a `.env.example` perche non ha parser inferibile.
+
+## STEP 13 - OTA Firmware
+
+Completato.
+
+- Implementato upload multipart reale in `POST /api/firmware`.
+- Salvati artefatti firmware su filesystem sotto `GROWLAB_FIRMWARE_STORAGE_PATH`.
+- Aggiunto limite upload `GROWLAB_FIRMWARE_UPLOAD_MAX_BYTES`, default `32 MiB`.
+- Salvati in `firmware_versions` path relativo, SHA-256, size, channel e metadata upload.
+- Aggiunto `GET /api/firmware/{id}/file` per servire artefatti firmware da path controllato.
+- Aggiunto `GET /api/devices/{id}/ota` per lista OTA job del device.
+- `POST /api/devices/{id}/ota/dry-run` ora produce report minimo di compatibilita device/firmware.
+- `POST /api/devices/{id}/ota` crea job `pending` e prepara `metadata.mqttCommand`.
+- Il comando MQTT preparato include topic `growlab/devices/{device_uid}/ota/command` e payload con job, firmware, download URL, checksum e size.
+- Nessun publish MQTT automatico e nessun update firmware automatico.
+- Il worker continua a gestire lo stato OTA da `growlab/devices/+/ota/status`.
+- Aggiornato OpenAPI e rigenerato client Orval.
+- Aggiornata pagina `/firmware` con form upload, download artefatto, dry-run manuale, creazione job e lista status OTA.
+- Aggiornati `.env.example` e Docker Compose con `GROWLAB_FIRMWARE_UPLOAD_MAX_BYTES`.
+
+Verifiche leggere eseguite:
+
+```bash
+gofmt -w apps/api/cmd/api/main.go apps/api/internal/config/config.go apps/api/internal/handlers/domain.go apps/api/internal/http/router.go apps/api/internal/services/domain.go
+make openapi-generate
+make sqlc
+python3 -c "import yaml; yaml.safe_load(open('openapi/growlab.openapi.yaml')); print('openapi yaml ok')"
+pnpm exec prettier --write openapi/growlab.openapi.yaml apps/web/app/firmware/page.tsx apps/web/components/firmware/firmware-upload-form.tsx apps/web/components/firmware/ota-control-panel.tsx apps/web/lib/api.ts apps/web/lib/queries.ts packages/openapi-client/src/runtime/fetcher.ts infrastructure/docker/docker-compose.yml docs/STEP_13_OTA_FIRMWARE.md docs/IMPLEMENTATION_STATUS.md docs/STEP_19_FINAL_AUDIT.md
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+pnpm --filter @growlab/web exec eslint .
+GOCACHE=/tmp/growlab-go-build go list ./apps/api/...
+GOCACHE=/tmp/growlab-go-build go list ./workers/growlab-worker/...
+docker compose -f infrastructure/docker/docker-compose.yml config
+git diff --check
+```
+
+Note:
+
+- Per scelta operativa non vengono eseguiti `go build ./...`, `go test ./...`, `pnpm build`, `make build` o build globali.
+- Il dev server Next.js non e stato riavviato.
+- `prettier` non e stato applicato a `.env.example` perche non ha parser inferibile.
+
+## STEP 14 - ESP32 Firmware
+
+Completato.
+
+- Aggiunto progetto PlatformIO in `firmware/esp32-growlab`.
+- Configurato stack Arduino ESP32 con librerie:
+  - `PubSubClient`
+  - `ArduinoJson`
+- Aggiunto config example `include/growlab_config.example.h`.
+- Aggiunto supporto a config locale ignorata da git: `include/growlab_local_config.h`.
+- Implementata connessione Wi-Fi con retry.
+- Implementata connessione MQTT con retry, will status e subscribe ai topic controllo.
+- Pubblicati topic compatibili con il worker:
+  - `growlab/devices/{device_uid}/heartbeat`
+  - `growlab/devices/{device_uid}/telemetry`
+  - `growlab/devices/{device_uid}/status`
+  - `growlab/devices/{device_uid}/ota/status`
+- Sottoscritti topic:
+  - `growlab/devices/{device_uid}/config`
+  - `growlab/devices/{device_uid}/command`
+  - `growlab/devices/{device_uid}/ota/command`
+- Implementato heartbeat con IP, RSSI, uptime e firmware version.
+- Implementata telemetry mock con letture `mock_temperature`, `mock_humidity`, `mock_soil_moisture`.
+- Implementato config topic per intervalli heartbeat/telemetry e toggle telemetry mock.
+- Implementato command topic solo per comandi safe:
+  - `status`
+  - `all_off`
+  - `relay_off`
+  - `pump_off`
+  - `restart`
+- Relay e pompa vengono portati a OFF subito al boot, prima di Wi-Fi/MQTT.
+- Non sono implementati comandi ON per pompa/relay.
+- Implementato placeholder OTA: riceve `ota_update`, pubblica status OTA e fallisce esplicitamente senza installare firmware.
+- Aggiunto README firmware con topic, setup e note safety.
+
+Verifiche leggere eseguite:
+
+```bash
+python3 -c "import configparser; p='firmware/esp32-growlab/platformio.ini'; c=configparser.ConfigParser(interpolation=None); c.read(p); assert c.has_section('env:esp32dev'); print('platformio ini ok')"
+python3 -c "from pathlib import Path; p=Path('firmware/esp32-growlab/src/main.cpp'); s=p.read_text(); assert 'growlab/devices/' in s and 'ota/status' in s and 'setSafeOutputsOff();' in s; print('esp32 firmware static checks ok')"
+pnpm exec prettier --write docs/STEP_14_ESP32_FIRMWARE.md docs/IMPLEMENTATION_STATUS.md docs/STEP_19_FINAL_AUDIT.md firmware/esp32-growlab/README.md
+git diff --check
+```
+
+Note:
+
+- Non e stato eseguito `pio run` per evitare download/build PlatformIO non richiesti.
+- Per scelta operativa non vengono eseguiti `go build ./...`, `go test ./...`, `pnpm build`, `make build` o build globali.
+- Il dev server Next.js non e stato riavviato.
+
+## STEP 15 - Irrigation Safe Module
+
+Completato.
+
+- Aggiunta lettura config API per:
+  - `GROWLAB_FEATURE_IRRIGATION_MANUAL`
+  - `GROWLAB_FEATURE_IRRIGATION_AUTOMATION`
+- Aggiunta safety config nel domain service.
+- `GET /api/irrigation` forza risposta read-only:
+  - `enabled=false`
+  - `automationEnabled=false`
+  - metadata con safe mode e feature flags configurate
+- Aggiunto `GET /api/irrigation/safety`.
+- `POST /api/irrigation/{id}/manual-run` continua a restituire sempre `IRRIGATION_DISABLED`.
+- Nessun comando pompa attivo.
+- Nessuna automazione.
+- Nessun publish MQTT di irrigazione.
+- Aggiornato OpenAPI e rigenerato client Orval.
+- Aggiunta pagina frontend `/irrigation`.
+- Aggiunta voce navigation `Irrigation`.
+- UI irrigazione read-only con controlli manual run disabilitati.
+
+Verifiche leggere eseguite:
+
+```bash
+gofmt -w apps/api/cmd/api/main.go apps/api/internal/config/config.go apps/api/internal/handlers/domain.go apps/api/internal/http/router.go apps/api/internal/services/domain.go
+make openapi-generate
+python3 -c "import yaml; yaml.safe_load(open('openapi/growlab.openapi.yaml')); print('openapi yaml ok')"
+pnpm exec prettier --write openapi/growlab.openapi.yaml apps/web/app/irrigation/page.tsx apps/web/components/layout/app-shell.tsx apps/web/lib/queries.ts docs/STEP_15_IRRIGATION_SAFE_MODULE.md docs/IMPLEMENTATION_STATUS.md docs/STEP_19_FINAL_AUDIT.md
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+pnpm --filter @growlab/web exec eslint .
+GOCACHE=/tmp/growlab-go-build go list ./apps/api/...
+git diff --check
+```
+
+Note:
+
+- Per scelta operativa non vengono eseguiti `go build ./...`, `go test ./...`, `pnpm build`, `make build` o build globali.
+- Il dev server Next.js non e stato riavviato.
+
+## STEP 16 - Monitoring & Observability
+
+Completato e rifinito come integrazione esterna.
+
+- Il monitoring generico homelab e stato spostato fuori dal repository GrowLab.
+- Creata repo dedicata:
+  - `/home/andrea/projects/homelab-monitoring`
+- La repo homelab monitoring contiene:
+  - Docker Compose monitoring;
+  - Grafana;
+  - Prometheus;
+  - Loki;
+  - Grafana Alloy;
+  - cAdvisor opzionale con profile `container-metrics`;
+  - Redis exporter opzionale con profile `redis-exporter`;
+  - Prometheus file service discovery;
+  - provisioning Grafana datasource;
+  - dashboard GrowLab applicativa;
+  - guida per aggiungere altri servizi homelab.
+- GrowLab mantiene solo l'integrazione:
+  - endpoint API `/metrics`;
+  - endpoint worker `/metrics`;
+  - `docs/MONITORING_INTEGRATION.md`;
+  - riferimenti operativi per datasource TimescaleDB/PostgreSQL.
+- Rimosso il target Makefile `make monitoring-config`.
+- Rimosse le configurazioni `infrastructure/monitoring` dal repository GrowLab.
+- Rimosso il backup della configurazione monitoring dallo script backup GrowLab.
+- Non sono stati introdotti node exporter, Proxmox monitoring o Alertmanager.
+
+Verifiche leggere eseguite:
+
+```bash
+cd /home/andrea/projects/homelab-monitoring
+docker compose --env-file .env.example -f docker-compose.yml config
+docker compose --env-file .env.example -f docker-compose.yml --profile redis-exporter --profile container-metrics config
+pnpm exec prettier --write docs/STEP_16_MONITORING_OBSERVABILITY.md docs/MONITORING_INTEGRATION.md docs/IMPLEMENTATION_STATUS.md docs/STEP_19_FINAL_AUDIT.md
+git diff --check
+```
+
+Note:
+
+- Non sono stati avviati container monitoring.
+- Per scelta operativa non vengono eseguiti `go build ./...`, `go test ./...`, `pnpm build`, `make build` o build globali.
+- Il dev server Next.js non e stato riavviato.
+
+## STEP 17 - Security, Backup, Deploy
+
+Completato.
+
+- Aggiunta security baseline in `docs/SECURITY_BASELINE.md`.
+- Aggiunto runbook deploy in `docs/DEPLOYMENT_RUNBOOK.md`.
+- Aggiunta guida backup/restore in `docs/BACKUP_RESTORE.md`.
+- Hardening Docker Compose app:
+  - web bind su `GROWLAB_LAN_BIND`;
+  - API bind su `GROWLAB_LAN_BIND`;
+  - worker metrics bind su `GROWLAB_LAN_BIND`;
+  - MQTT/EMQX dashboard gia su `GROWLAB_LAN_BIND`;
+  - Redis senza porte pubblicate;
+  - Ollama senza porte pubblicate e dietro profile `ai`;
+  - `GROWLAB_CORS_ORIGINS` cablato sull'API.
+- Aggiunto `GROWLAB_CORS_ORIGINS` in `.env.example` e `infrastructure/.env.example`.
+- Isolato `make docker-config` dalla `.env` locale: usa `infrastructure/.env.example`.
+- Aggiunti script:
+  - `infrastructure/scripts/growlab_backup.sh`;
+  - `infrastructure/scripts/growlab_restore.sh`;
+  - `infrastructure/scripts/security_check.sh`.
+- Aggiunti target Makefile:
+  - `make security-check`;
+  - `make backup`.
+- Backup previsto:
+  - dump PostgreSQL custom con `pg_dump`;
+  - volume `growlab_images`;
+  - volume `growlab_firmware`;
+  - configurazione Docker GrowLab;
+  - `.env` locali se presenti;
+  - Git bundle e status.
+- La repo homelab monitoring viene salvata separatamente dai backup GrowLab.
+- Restore protetto da `GROWLAB_RESTORE_CONFIRM=restore`.
+- Nessuna auth introdotta.
+- Nessun cambio stack.
+
+Verifiche leggere eseguite:
+
+```bash
+bash -n infrastructure/scripts/growlab_backup.sh
+bash -n infrastructure/scripts/growlab_restore.sh
+bash -n infrastructure/scripts/security_check.sh
+pnpm exec prettier --write docs/STEP_17_SECURITY_BACKUP_DEPLOY.md docs/SECURITY_BASELINE.md docs/BACKUP_RESTORE.md docs/DEPLOYMENT_RUNBOOK.md infrastructure/docker/docker-compose.yml
+make docker-config
+make security-check
+git diff --check
+```
+
+Note:
+
+- Non sono stati eseguiti backup o restore.
+- Non sono stati avviati container.
+- Per scelta operativa non vengono eseguiti `go build ./...`, `go test ./...`, `pnpm build`, `make build` o build globali.
+- Il dev server Next.js non e stato riavviato.
+
+## STEP 18 - AI Future Module
+
+Completato come guardrail e documentazione futura.
+
+- Aggiornato `docs/STEP_18_AI_FUTURE_MODULE.md`.
+- AI/Ollama resta futura e non implementata nel MVP.
+- `GROWLAB_FEATURE_AI=false` resta il default negli env example.
+- `growlab-ollama` resta dietro Compose profile `ai`.
+- Ollama non pubblica porte host.
+- Nessun endpoint OpenAPI AI introdotto.
+- Nessun handler API AI introdotto.
+- Nessuna UI AI introdotta.
+- Nessuna tabella operativa AI introdotta.
+- Nessuna automazione usa output AI.
+- Aggiornata la security baseline con guardrail AI/Ollama.
+
+Verifiche leggere eseguite:
+
+```bash
+! rg -n "/api/ai|ai/" openapi apps/api apps/web
+! rg -n "CREATE TABLE .*ai|ai_" database/migrations database/queries
+make docker-config
+make security-check
+git diff --check
+```
+
+Note:
+
+- Non sono stati avviati container.
+- Per scelta operativa non vengono eseguiti `go build ./...`, `go test ./...`, `pnpm build`, `make build` o build globali.
+- Il dev server Next.js non e stato riavviato.
+
+## STEP 19 - Final Audit
+
+Completato con verifiche leggere.
+
+- Aggiornato `docs/STEP_19_FINAL_AUDIT.md`.
+- Aggiunto `docs/NEXT_STEPS.md`.
+- Il final audit ora include anche i guardrail STEP 18.
+- I next step separano deploy GrowLab, monitoring homelab esterno e future feature non operative.
+- Eseguiti generator/check leggeri senza build pesanti.
+- `make migrate-up` non e stato eseguito per non applicare modifiche al database esterno `pg-01`.
+
+Verifiche leggere eseguite:
+
+```bash
+make sqlc
+make openapi-generate
+python3 -c "import yaml; yaml.safe_load(open('openapi/growlab.openapi.yaml', encoding='utf-8')); print('openapi yaml ok')"
+make docker-config
+make security-check
+bash -n infrastructure/scripts/growlab_backup.sh
+bash -n infrastructure/scripts/growlab_restore.sh
+rg -n -- "-- \\+goose (Up|Down)" database/migrations
+rg -n -- "-- name:" database/queries
+! rg -n "/api/ai|ai/" openapi apps/api apps/web
+! rg -n "CREATE TABLE .*ai|ai_" database/migrations database/queries
+git diff --check
+```
+
+Note:
+
+- Non sono stati avviati container.
+- Per scelta operativa non vengono eseguiti `go build ./...`, `go test ./...`, `pnpm build`, `make build` o build globali.
+- Il dev server Next.js non e stato riavviato.

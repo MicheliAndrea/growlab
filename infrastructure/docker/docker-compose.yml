@@ -11,7 +11,7 @@ services:
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080}
       NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-GrowLab}
     ports:
-      - "3000:3000"
+      - "${GROWLAB_LAN_BIND:-127.0.0.1}:3000:3000"
     depends_on:
       - growlab-api
     networks:
@@ -27,6 +27,7 @@ services:
     environment:
       GROWLAB_API_ADDR: ${GROWLAB_API_ADDR:-:8080}
       GROWLAB_PUBLIC_API_URL: ${GROWLAB_PUBLIC_API_URL:-http://localhost:8080}
+      GROWLAB_CORS_ORIGINS: ${GROWLAB_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       GROWLAB_DB_HOST: ${GROWLAB_DB_HOST:-pg-01}
       GROWLAB_DB_PORT: ${GROWLAB_DB_PORT:-5432}
       GROWLAB_DB_NAME: ${GROWLAB_DB_NAME:-growlab}
@@ -35,7 +36,10 @@ services:
       GROWLAB_DB_SSLMODE: ${GROWLAB_DB_SSLMODE:-disable}
       GROWLAB_REDIS_ADDR: ${GROWLAB_REDIS_ADDR:-growlab-redis:6379}
       GROWLAB_IMAGE_STORAGE_PATH: ${GROWLAB_IMAGE_STORAGE_PATH:-/data/images}
+      GROWLAB_IMAGE_UPLOAD_MAX_BYTES: ${GROWLAB_IMAGE_UPLOAD_MAX_BYTES:-15728640}
       GROWLAB_FIRMWARE_STORAGE_PATH: ${GROWLAB_FIRMWARE_STORAGE_PATH:-/data/firmware}
+      GROWLAB_FIRMWARE_UPLOAD_MAX_BYTES: ${GROWLAB_FIRMWARE_UPLOAD_MAX_BYTES:-33554432}
+      GROWLAB_SHELLY_TIMEOUT: ${GROWLAB_SHELLY_TIMEOUT:-3s}
       GROWLAB_FEATURE_AUTH: ${GROWLAB_FEATURE_AUTH:-false}
       GROWLAB_FEATURE_AI: ${GROWLAB_FEATURE_AI:-false}
       GROWLAB_FEATURE_IRRIGATION_MANUAL: ${GROWLAB_FEATURE_IRRIGATION_MANUAL:-false}
@@ -43,7 +47,7 @@ services:
       GROWLAB_FEATURE_SHELLY_LIGHTING: ${GROWLAB_FEATURE_SHELLY_LIGHTING:-true}
       GROWLAB_FEATURE_OTA: ${GROWLAB_FEATURE_OTA:-true}
     ports:
-      - "8080:8080"
+      - "${GROWLAB_LAN_BIND:-127.0.0.1}:8080:8080"
     volumes:
       - growlab_images:/data/images
       - growlab_firmware:/data/firmware
@@ -81,7 +85,7 @@ services:
       GROWLAB_FEATURE_SHELLY_LIGHTING: ${GROWLAB_FEATURE_SHELLY_LIGHTING:-true}
       GROWLAB_FEATURE_OTA: ${GROWLAB_FEATURE_OTA:-true}
     ports:
-      - "9091:9091"
+      - "${GROWLAB_LAN_BIND:-127.0.0.1}:9091:9091"
     volumes:
       - growlab_images:/data/images
       - growlab_firmware:/data/firmware

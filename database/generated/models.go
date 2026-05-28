@@ -23,6 +23,7 @@ type Device struct {
 	CreatedAt         pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 	FirmwareChannelID pgtype.UUID        `db:"firmware_channel_id" json:"firmware_channel_id"`
+	LastSeenAt        pgtype.Timestamptz `db:"last_seen_at" json:"last_seen_at"`
 }
 
 type DeviceCapability struct {
@@ -280,6 +281,7 @@ type PlantImage struct {
 	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	GrowthStage      pgtype.Text        `db:"growth_stage" json:"growth_stage"`
 	GrowthTracking   []byte             `db:"growth_tracking" json:"growth_tracking"`
+	ZoneID           pgtype.UUID        `db:"zone_id" json:"zone_id"`
 }
 
 type PlantImageTag struct {

@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help dev dev-web dev-api dev-worker build test lint docker-config openapi-generate sqlc migrate-up migrate-down
+.PHONY: help dev dev-web dev-api dev-worker build test lint docker-config security-check backup openapi-generate sqlc migrate-up migrate-down
 
 ifneq (,$(wildcard .env))
 include .env
@@ -38,6 +38,8 @@ help:
 	@printf "%s\n" "  make test"
 	@printf "%s\n" "  make lint"
 	@printf "%s\n" "  make docker-config"
+	@printf "%s\n" "  make security-check"
+	@printf "%s\n" "  make backup"
 	@printf "%s\n" "  make openapi-generate"
 	@printf "%s\n" "  make sqlc"
 	@printf "%s\n" "  make migrate-up"
@@ -47,13 +49,13 @@ dev:
 	@printf "%s\n" "App dev commands will be wired in later steps."
 
 dev-web:
-	@printf "%s\n" "Web app dev command will be wired in STEP 08."
+	$(PNPM) --filter @growlab/web dev
 
 dev-api:
 	$(GO) run ./apps/api/cmd/api
 
 dev-worker:
-	@printf "%s\n" "Go worker dev command will be wired in STEP 07."
+	$(GO) run ./workers/growlab-worker/cmd/worker
 
 build:
 	@printf "%s\n" "Build is intentionally manual. Run a targeted go build only when explicitly needed."
@@ -65,7 +67,13 @@ lint:
 	@printf "%s\n" "Lint command will be wired after tool choice; no global compile is run here."
 
 docker-config:
-	docker compose -f infrastructure/docker/docker-compose.yml config
+	env -i PATH="$$PATH" HOME="$$HOME" docker compose --env-file infrastructure/.env.example -f infrastructure/docker/docker-compose.yml config
+
+security-check:
+	bash infrastructure/scripts/security_check.sh
+
+backup:
+	bash infrastructure/scripts/growlab_backup.sh
 
 openapi-generate:
 	@python3 -c 'import yaml; yaml.safe_load(open("$(OPENAPI_SPEC)", encoding="utf-8"))'

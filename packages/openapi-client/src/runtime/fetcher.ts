@@ -1,41 +1,43 @@
-export type GrowlabFetchOptions<TBody = unknown> = {
-  url: string;
-  method: string;
-  params?: Record<string, unknown>;
-  headers?: HeadersInit;
-  data?: TBody;
-  signal?: AbortSignal;
+export type GrowlabFetchResponse<TData = unknown> = {
+  data: TData;
+  status: number;
+  headers: Headers;
 };
 
-export async function growlabFetch<TResponse, TBody = unknown>(
-  options: GrowlabFetchOptions<TBody>,
+export async function growlabFetch<TResponse>(
+  input: string,
+  init?: RequestInit,
 ): Promise<TResponse> {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
-  const url = new URL(options.url, baseUrl || "http://localhost");
+  const baseUrl =
+    process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+  const url = baseUrl ? new URL(input, baseUrl).toString() : input;
+  const isFormData =
+    typeof FormData !== "undefined" && init?.body instanceof FormData;
+  const headers = isFormData
+    ? init?.headers
+    : {
+        "Content-Type": "application/json",
+        ...init?.headers,
+      };
 
-  for (const [key, value] of Object.entries(options.params ?? {})) {
-    if (value !== undefined && value !== null) {
-      url.searchParams.set(key, String(value));
-    }
-  }
-
-  const response = await fetch(baseUrl ? url.toString() : `${url.pathname}${url.search}`, {
-    method: options.method,
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
-    body: options.data === undefined ? undefined : JSON.stringify(options.data),
-    signal: options.signal,
+  const response = await fetch(url, {
+    ...init,
+    headers,
   });
 
-  if (!response.ok) {
-    throw new Error(`GrowLab API request failed with status ${response.status}`);
-  }
+  const contentType = response.headers.get("content-type") ?? "";
+  const data =
+    response.status === 204
+      ? undefined
+      : contentType.includes("application/json")
+        ? await response.json()
+        : contentType.includes("application/octet-stream")
+          ? await response.blob()
+          : await response.text();
 
-  if (response.status === 204) {
-    return undefined as TResponse;
-  }
-
-  return (await response.json()) as TResponse;
+  return {
+    data,
+    status: response.status,
+    headers: response.headers,
+  } as TResponse;
 }

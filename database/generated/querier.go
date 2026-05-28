@@ -12,10 +12,13 @@ import (
 
 type Querier interface {
 	CreateDeviceCapability(ctx context.Context, arg CreateDeviceCapabilityParams) (DeviceCapability, error)
+	CreateDeviceHeartbeat(ctx context.Context, arg CreateDeviceHeartbeatParams) (DeviceHeartbeat, error)
 	CreateLightingProfile(ctx context.Context, arg CreateLightingProfileParams) (LightingProfile, error)
 	CreateLightingProfileStep(ctx context.Context, arg CreateLightingProfileStepParams) (LightingProfileStep, error)
+	CreatePlantEvent(ctx context.Context, arg CreatePlantEventParams) (PlantEvent, error)
 	CreatePlantTask(ctx context.Context, arg CreatePlantTaskParams) (PlantTask, error)
 	CreateSensorCalibration(ctx context.Context, arg CreateSensorCalibrationParams) (SensorCalibration, error)
+	CreateSensorReading(ctx context.Context, arg CreateSensorReadingParams) (SensorReading, error)
 	CreateSystemAlert(ctx context.Context, arg CreateSystemAlertParams) (SystemAlert, error)
 	CreateSystemEvent(ctx context.Context, arg CreateSystemEventParams) (SystemEvent, error)
 	CreateZoneProfile(ctx context.Context, arg CreateZoneProfileParams) (ZoneProfile, error)
@@ -31,8 +34,10 @@ type Querier interface {
 	GetPlant(ctx context.Context, id pgtype.UUID) (Plant, error)
 	GetPlantCategory(ctx context.Context, id pgtype.UUID) (PlantCategory, error)
 	GetPlantFamily(ctx context.Context, id pgtype.UUID) (PlantFamily, error)
+	GetPlantImage(ctx context.Context, id pgtype.UUID) (PlantImage, error)
 	GetPlantSpecies(ctx context.Context, id pgtype.UUID) (PlantSpecy, error)
 	GetSensor(ctx context.Context, id pgtype.UUID) (Sensor, error)
+	GetSensorByDeviceUIDAndKey(ctx context.Context, arg GetSensorByDeviceUIDAndKeyParams) (Sensor, error)
 	GetSensorReading(ctx context.Context, arg GetSensorReadingParams) (SensorReading, error)
 	GetZone(ctx context.Context, id pgtype.UUID) (Zone, error)
 	ListDeviceCapabilities(ctx context.Context, deviceID pgtype.UUID) ([]DeviceCapability, error)
@@ -42,6 +47,7 @@ type Querier interface {
 	ListFirmwareVersionsByDeviceType(ctx context.Context, deviceType string) ([]FirmwareVersion, error)
 	ListGrowAreas(ctx context.Context) ([]GrowArea, error)
 	ListIrrigationSystemsByZone(ctx context.Context, zoneID pgtype.UUID) ([]IrrigationSystem, error)
+	ListLightingEvents(ctx context.Context, lightingSystemID pgtype.UUID) ([]LightingEvent, error)
 	ListLightingProfileSteps(ctx context.Context, lightingProfileID pgtype.UUID) ([]LightingProfileStep, error)
 	ListLightingProfiles(ctx context.Context, zoneID pgtype.UUID) ([]LightingProfile, error)
 	ListLightingSchedules(ctx context.Context, lightingSystemID pgtype.UUID) ([]LightingSchedule, error)
@@ -62,6 +68,9 @@ type Querier interface {
 	ListSystemEvents(ctx context.Context, limit int32) ([]SystemEvent, error)
 	ListZoneProfiles(ctx context.Context, zoneID pgtype.UUID) ([]ZoneProfile, error)
 	ListZonesByGrowArea(ctx context.Context, growAreaID pgtype.UUID) ([]Zone, error)
+	TouchDeviceLastSeen(ctx context.Context, arg TouchDeviceLastSeenParams) error
+	TouchDeviceLastSeenByUID(ctx context.Context, arg TouchDeviceLastSeenByUIDParams) error
+	UpdateOtaJobStatus(ctx context.Context, arg UpdateOtaJobStatusParams) error
 	UpdateSystemAlertStatus(ctx context.Context, arg UpdateSystemAlertStatusParams) (SystemAlert, error)
 }
 

@@ -32,6 +32,7 @@ __pycache__/
 # PlatformIO
 .pio/
 firmware/**/.pio/
+firmware/**/include/growlab_local_config.h
 
 # Generated artifacts
 packages/openapi-client/src/generated/

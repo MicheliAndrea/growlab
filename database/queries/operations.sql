@@ -7,6 +7,9 @@ SELECT * FROM lighting_systems WHERE zone_id = $1 ORDER BY name;
 -- name: ListLightingSchedules :many
 SELECT * FROM lighting_schedules WHERE lighting_system_id = $1 ORDER BY starts_at;
 
+-- name: ListLightingEvents :many
+SELECT * FROM lighting_events WHERE lighting_system_id = $1 ORDER BY occurred_at DESC LIMIT 100;
+
 -- name: GetFirmwareVersion :one
 SELECT * FROM firmware_versions WHERE id = $1;
 

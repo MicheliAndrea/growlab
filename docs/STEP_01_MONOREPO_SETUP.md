@@ -24,7 +24,6 @@ growlab/
 │   └── generated/
 ├── infrastructure/
 │   ├── docker/
-│   ├── monitoring/
 │   ├── mqtt/
 │   └── scripts/
 ├── docs/

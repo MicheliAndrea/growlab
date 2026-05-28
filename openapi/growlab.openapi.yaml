@@ -10,6 +10,7 @@ tags:
   - name: Health
   - name: Zones
   - name: Plants
+  - name: Wiki
   - name: System
   - name: Devices
   - name: Lighting
@@ -247,7 +248,57 @@ paths:
                 items:
                   $ref: "#/components/schemas/PlantTimelineItem"
 
+  /api/plants/{id}/events:
+    get:
+      tags: [Plants]
+      operationId: listPlantEvents
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Plant events.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PlantEvent"
+    post:
+      tags: [Plants]
+      operationId: createPlantEvent
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlantEventCreateRequest"
+      responses:
+        "201":
+          description: Plant event created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlantEvent"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
   /api/plants/{id}/images:
+    get:
+      tags: [Plants]
+      operationId: listPlantImages
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Plant image metadata list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PlantImage"
     post:
       tags: [Plants]
       operationId: uploadPlantImage
@@ -268,6 +319,31 @@ paths:
                 $ref: "#/components/schemas/PlantImage"
         "400":
           $ref: "#/components/responses/BadRequest"
+
+  /api/images/{id}/file:
+    get:
+      tags: [Plants]
+      operationId: getPlantImageFile
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Stored plant image file.
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/plants/{id}/tasks:
     get:
@@ -304,6 +380,48 @@ paths:
                 $ref: "#/components/schemas/PlantTask"
         "400":
           $ref: "#/components/responses/BadRequest"
+
+  /api/wiki/plant-families:
+    get:
+      tags: [Wiki]
+      operationId: listPlantFamilies
+      responses:
+        "200":
+          description: Plant families from the local wiki catalog.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PlantFamily"
+
+  /api/wiki/plant-categories:
+    get:
+      tags: [Wiki]
+      operationId: listPlantCategories
+      responses:
+        "200":
+          description: Plant categories from the local wiki catalog.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PlantCategory"
+
+  /api/wiki/plant-species:
+    get:
+      tags: [Wiki]
+      operationId: listPlantSpecies
+      responses:
+        "200":
+          description: Plant species from the local wiki catalog.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PlantSpecies"
 
   /api/system/events:
     get:
@@ -570,6 +688,38 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
 
+  /api/lighting/{id}/state:
+    get:
+      tags: [Lighting]
+      operationId: getLightingState
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Shelly lighting state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LightingState"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/lighting/{id}/events:
+    get:
+      tags: [Lighting]
+      operationId: listLightingEvents
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Lighting command and state history.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LightingEvent"
+
   /api/lighting/{id}/on:
     post:
       tags: [Lighting]
@@ -639,9 +789,9 @@ paths:
       requestBody:
         required: true
         content:
-          application/json:
+          multipart/form-data:
             schema:
-              $ref: "#/components/schemas/FirmwareVersionCreateRequest"
+              $ref: "#/components/schemas/FirmwareUploadRequest"
       responses:
         "201":
           description: Firmware version registered.
@@ -651,6 +801,23 @@ paths:
                 $ref: "#/components/schemas/FirmwareVersion"
         "400":
           $ref: "#/components/responses/BadRequest"
+
+  /api/firmware/{id}/file:
+    get:
+      tags: [Firmware]
+      operationId: downloadFirmwareFile
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Firmware artifact file.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/firmware/channels:
     get:
@@ -667,6 +834,20 @@ paths:
                   $ref: "#/components/schemas/FirmwareChannel"
 
   /api/devices/{id}/ota:
+    get:
+      tags: [Firmware]
+      operationId: listOtaJobs
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: OTA jobs for a device.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OtaJob"
     post:
       tags: [Firmware]
       operationId: createOtaJob
@@ -723,6 +904,18 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/IrrigationSystem"
+
+  /api/irrigation/safety:
+    get:
+      tags: [Irrigation]
+      operationId: getIrrigationSafety
+      responses:
+        "200":
+          description: Irrigation safety status. Commands remain disabled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IrrigationSafetyStatus"
 
   /api/irrigation/{id}/manual-run:
     post:
@@ -794,7 +987,8 @@ components:
 
     Zone:
       type: object
-      required: [id, name, slug, environmentType, createdAt, updatedAt]
+      required:
+        [id, growAreaId, name, slug, environmentType, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -802,7 +996,6 @@ components:
         growAreaId:
           type: string
           format: uuid
-          nullable: true
         name:
           type: string
         slug:
@@ -824,12 +1017,11 @@ components:
 
     ZoneCreateRequest:
       type: object
-      required: [name, slug]
+      required: [growAreaId, name, slug]
       properties:
         growAreaId:
           type: string
           format: uuid
-          nullable: true
         name:
           type: string
         slug:
@@ -987,6 +1179,48 @@ components:
         metadata:
           $ref: "#/components/schemas/JsonObject"
 
+    PlantEvent:
+      type: object
+      required: [id, plantId, eventType, occurredAt, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        plantId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          example: pruning
+        occurredAt:
+          type: string
+          format: date-time
+        notes:
+          type: string
+          nullable: true
+        metadata:
+          $ref: "#/components/schemas/JsonObject"
+        createdAt:
+          type: string
+          format: date-time
+
+    PlantEventCreateRequest:
+      type: object
+      required: [eventType]
+      properties:
+        eventType:
+          type: string
+          example: pruning
+        occurredAt:
+          type: string
+          format: date-time
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        metadata:
+          $ref: "#/components/schemas/JsonObject"
+
     PlantImage:
       type: object
       required: [id, plantId, storagePath, uploadedAt]
@@ -997,6 +1231,10 @@ components:
         plantId:
           type: string
           format: uuid
+        zoneId:
+          type: string
+          format: uuid
+          nullable: true
         storagePath:
           type: string
         originalFilename:
@@ -1008,6 +1246,9 @@ components:
         sizeBytes:
           type: integer
           format: int64
+          nullable: true
+        checksumSha256:
+          type: string
           nullable: true
         capturedAt:
           type: string
@@ -1023,6 +1264,9 @@ components:
           items:
             type: string
         uploadedAt:
+          type: string
+          format: date-time
+        createdAt:
           type: string
           format: date-time
 
@@ -1102,13 +1346,90 @@ components:
         metadata:
           $ref: "#/components/schemas/JsonObject"
 
+    PlantFamily:
+      type: object
+      required: [id, scientificName, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        commonName:
+          type: string
+          nullable: true
+        scientificName:
+          type: string
+        metadata:
+          $ref: "#/components/schemas/JsonObject"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PlantCategory:
+      type: object
+      required: [id, name, slug, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+          nullable: true
+        metadata:
+          $ref: "#/components/schemas/JsonObject"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PlantSpecies:
+      type: object
+      required: [id, scientificName, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        familyId:
+          type: string
+          format: uuid
+          nullable: true
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+        commonName:
+          type: string
+          nullable: true
+        scientificName:
+          type: string
+        cultivar:
+          type: string
+          nullable: true
+        metadata:
+          $ref: "#/components/schemas/JsonObject"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
     SystemSeverity:
       type: string
       enum: [info, warning, error, critical]
 
     SystemEvent:
       type: object
-      required: [id, eventType, severity, source, message, occurredAt, createdAt]
+      required:
+        [id, eventType, severity, source, message, occurredAt, createdAt]
       properties:
         id:
           type: string
@@ -1187,7 +1508,18 @@ components:
 
     SystemAlert:
       type: object
-      required: [id, severity, source, title, message, status, raisedAt, createdAt, updatedAt]
+      required:
+        [
+          id,
+          severity,
+          source,
+          title,
+          message,
+          status,
+          raisedAt,
+          createdAt,
+          updatedAt,
+        ]
       properties:
         id:
           type: string
@@ -1276,6 +1608,10 @@ components:
           type: string
           format: uuid
           nullable: true
+        lastSeenAt:
+          type: string
+          format: date-time
+          nullable: true
         config:
           $ref: "#/components/schemas/JsonObject"
         metadata:
@@ -1289,7 +1625,16 @@ components:
 
     DeviceCapability:
       type: object
-      required: [id, deviceId, capabilityKey, capabilityType, enabled, createdAt, updatedAt]
+      required:
+        [
+          id,
+          deviceId,
+          capabilityKey,
+          capabilityType,
+          enabled,
+          createdAt,
+          updatedAt,
+        ]
       properties:
         id:
           type: string
@@ -1350,7 +1695,17 @@ components:
 
     SensorCalibration:
       type: object
-      required: [id, sensorId, method, status, calibrationData, rawPoints, createdAt, updatedAt]
+      required:
+        [
+          id,
+          sensorId,
+          method,
+          status,
+          calibrationData,
+          rawPoints,
+          createdAt,
+          updatedAt,
+        ]
       properties:
         id:
           type: string
@@ -1420,6 +1775,9 @@ components:
         provider:
           type: string
           example: shelly
+        endpointUrl:
+          type: string
+          nullable: true
         enabled:
           type: boolean
         config:
@@ -1435,7 +1793,18 @@ components:
 
     LightingProfile:
       type: object
-      required: [id, zoneId, name, enabled, isDefault, timezone, steps, createdAt, updatedAt]
+      required:
+        [
+          id,
+          zoneId,
+          name,
+          enabled,
+          isDefault,
+          timezone,
+          steps,
+          createdAt,
+          updatedAt,
+        ]
       properties:
         id:
           type: string
@@ -1563,6 +1932,61 @@ components:
           minimum: 0
           maximum: 100
 
+    LightingState:
+      type: object
+      required: [lightingSystemId, isOn, brightnessPercent]
+      properties:
+        lightingSystemId:
+          type: string
+          format: uuid
+        isOn:
+          type: boolean
+        brightnessPercent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        source:
+          type: string
+          nullable: true
+        provider:
+          type: string
+          nullable: true
+        endpointUrl:
+          type: string
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    LightingEvent:
+      type: object
+      required: [id, lightingSystemId, eventType, occurredAt, source, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        lightingSystemId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
+        brightnessPercent:
+          type: integer
+          minimum: 0
+          maximum: 100
+          nullable: true
+        source:
+          type: string
+        metadata:
+          $ref: "#/components/schemas/JsonObject"
+        createdAt:
+          type: string
+          format: date-time
+
     LightingCommandResponse:
       type: object
       required: [lightingSystemId, accepted]
@@ -1573,7 +1997,7 @@ components:
         accepted:
           type: boolean
         state:
-          type: string
+          $ref: "#/components/schemas/LightingState"
           nullable: true
         brightnessPercent:
           type: integer
@@ -1627,10 +2051,13 @@ components:
           type: string
           format: date-time
 
-    FirmwareVersionCreateRequest:
+    FirmwareUploadRequest:
       type: object
-      required: [deviceType, version, storagePath]
+      required: [file, deviceType, version]
       properties:
+        file:
+          type: string
+          format: binary
         deviceType:
           type: string
         version:
@@ -1638,15 +2065,6 @@ components:
         channelId:
           type: string
           format: uuid
-          nullable: true
-        storagePath:
-          type: string
-        checksumSha256:
-          type: string
-          nullable: true
-        sizeBytes:
-          type: integer
-          format: int64
           nullable: true
         metadata:
           $ref: "#/components/schemas/JsonObject"
@@ -1663,7 +2081,16 @@ components:
 
     OtaJob:
       type: object
-      required: [id, deviceId, firmwareVersionId, status, requestedAt, createdAt, updatedAt]
+      required:
+        [
+          id,
+          deviceId,
+          firmwareVersionId,
+          status,
+          requestedAt,
+          createdAt,
+          updatedAt,
+        ]
       properties:
         id:
           type: string
@@ -1711,7 +2138,8 @@ components:
 
     OtaDryRun:
       type: object
-      required: [id, deviceId, status, requestedAt, compatibilityReport, createdAt]
+      required:
+        [id, deviceId, status, requestedAt, compatibilityReport, createdAt]
       properties:
         id:
           type: string
@@ -1779,3 +2207,39 @@ components:
             code:
               type: string
               enum: [IRRIGATION_DISABLED]
+
+    IrrigationSafetyStatus:
+      type: object
+      required:
+        [
+          code,
+          safeMode,
+          manualRunEnabled,
+          automationEnabled,
+          manualFlagConfigured,
+          automationFlagConfigured,
+          pumpCommandsEnabled,
+          automationCommandsEnabled,
+        ]
+      properties:
+        code:
+          type: string
+          enum: [IRRIGATION_DISABLED]
+        safeMode:
+          type: boolean
+        manualRunEnabled:
+          type: boolean
+        automationEnabled:
+          type: boolean
+        manualFlagConfigured:
+          type: boolean
+        automationFlagConfigured:
+          type: boolean
+        manualRunResponseStatus:
+          type: integer
+        manualRunResponseCode:
+          type: string
+        pumpCommandsEnabled:
+          type: boolean
+        automationCommandsEnabled:
+          type: boolean

@@ -20,7 +20,7 @@ Questo repository e impostato come monorepo. Lo STEP 01 crea solo la struttura b
 - Lighting: Shelly Dimmer 2 local HTTP API
 - Firmware: ESP32 PlatformIO + Arduino
 - Deploy: Docker Compose su `app-01`
-- Monitoring: `mon-01` con Grafana, Prometheus, Loki e Alloy
+- Monitoring: repo homelab separata su `mon-01` con Grafana, Prometheus, Loki e Alloy
 
 ## Struttura
 
@@ -41,7 +41,6 @@ database/
   generated/
 infrastructure/
   docker/
-  monitoring/
   mqtt/
   scripts/
 docs/
@@ -61,6 +60,8 @@ make build
 make test
 make lint
 make docker-config
+make security-check
+make backup
 make openapi-generate
 make sqlc
 make migrate-up

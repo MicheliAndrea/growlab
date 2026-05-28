@@ -24,6 +24,9 @@ Creare `openapi/growlab.openapi.yaml` come source of truth.
 - GET /api/plants/{id}/timeline
 - POST /api/plants/{id}/images
 - GET/POST /api/plants/{id}/tasks
+- GET /api/wiki/plant-families
+- GET /api/wiki/plant-categories
+- GET /api/wiki/plant-species
 - GET/POST /api/system/events
 - GET/POST /api/system/alerts
 - POST /api/system/alerts/{id}/acknowledge
@@ -32,12 +35,14 @@ Creare `openapi/growlab.openapi.yaml` come source of truth.
 - GET /api/devices/{id}
 - GET /api/devices/{id}/capabilities
 - GET /api/devices/{id}/provisioning
+- GET/POST /api/sensors/{id}/calibrations
 - GET /api/lighting
 - GET/POST /api/lighting/profiles
 - POST /api/lighting/{id}/on
 - POST /api/lighting/{id}/off
 - POST /api/lighting/{id}/brightness
 - GET/POST /api/firmware
+- GET /api/firmware/channels
 - POST /api/devices/{id}/ota
 - POST /api/devices/{id}/ota/dry-run
 - GET /api/irrigation

@@ -7,9 +7,102 @@ package db
 
 import (
 	"context"
+	"net/netip"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const createDeviceHeartbeat = `-- name: CreateDeviceHeartbeat :one
+INSERT INTO device_heartbeats (
+  device_id,
+  observed_at,
+  status,
+  ip_address,
+  rssi_dbm,
+  uptime_seconds,
+  firmware_version,
+  metadata
+) VALUES (
+  $1, $2, $3, $4, $5, $6, $7, $8
+)
+RETURNING id, device_id, observed_at, status, ip_address, rssi_dbm, uptime_seconds, firmware_version, metadata, created_at
+`
+
+type CreateDeviceHeartbeatParams struct {
+	DeviceID        pgtype.UUID        `db:"device_id" json:"device_id"`
+	ObservedAt      pgtype.Timestamptz `db:"observed_at" json:"observed_at"`
+	Status          string             `db:"status" json:"status"`
+	IpAddress       *netip.Addr        `db:"ip_address" json:"ip_address"`
+	RssiDbm         pgtype.Int4        `db:"rssi_dbm" json:"rssi_dbm"`
+	UptimeSeconds   pgtype.Int8        `db:"uptime_seconds" json:"uptime_seconds"`
+	FirmwareVersion pgtype.Text        `db:"firmware_version" json:"firmware_version"`
+	Metadata        []byte             `db:"metadata" json:"metadata"`
+}
+
+func (q *Queries) CreateDeviceHeartbeat(ctx context.Context, arg CreateDeviceHeartbeatParams) (DeviceHeartbeat, error) {
+	row := q.db.QueryRow(ctx, createDeviceHeartbeat,
+		arg.DeviceID,
+		arg.ObservedAt,
+		arg.Status,
+		arg.IpAddress,
+		arg.RssiDbm,
+		arg.UptimeSeconds,
+		arg.FirmwareVersion,
+		arg.Metadata,
+	)
+	var i DeviceHeartbeat
+	err := row.Scan(
+		&i.ID,
+		&i.DeviceID,
+		&i.ObservedAt,
+		&i.Status,
+		&i.IpAddress,
+		&i.RssiDbm,
+		&i.UptimeSeconds,
+		&i.FirmwareVersion,
+		&i.Metadata,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createSensorReading = `-- name: CreateSensorReading :one
+INSERT INTO sensor_readings (
+  sensor_id,
+  recorded_at,
+  value_double,
+  metadata
+) VALUES (
+  $1, $2, $3, $4
+)
+RETURNING id, sensor_id, recorded_at, value_double, metadata, created_at
+`
+
+type CreateSensorReadingParams struct {
+	SensorID    pgtype.UUID        `db:"sensor_id" json:"sensor_id"`
+	RecordedAt  pgtype.Timestamptz `db:"recorded_at" json:"recorded_at"`
+	ValueDouble float64            `db:"value_double" json:"value_double"`
+	Metadata    []byte             `db:"metadata" json:"metadata"`
+}
+
+func (q *Queries) CreateSensorReading(ctx context.Context, arg CreateSensorReadingParams) (SensorReading, error) {
+	row := q.db.QueryRow(ctx, createSensorReading,
+		arg.SensorID,
+		arg.RecordedAt,
+		arg.ValueDouble,
+		arg.Metadata,
+	)
+	var i SensorReading
+	err := row.Scan(
+		&i.ID,
+		&i.SensorID,
+		&i.RecordedAt,
+		&i.ValueDouble,
+		&i.Metadata,
+		&i.CreatedAt,
+	)
+	return i, err
+}
 
 const getDeviceHeartbeat = `-- name: GetDeviceHeartbeat :one
 SELECT id, device_id, observed_at, status, ip_address, rssi_dbm, uptime_seconds, firmware_version, metadata, created_at FROM device_heartbeats WHERE id = $1 AND observed_at = $2
@@ -34,6 +127,39 @@ func (q *Queries) GetDeviceHeartbeat(ctx context.Context, arg GetDeviceHeartbeat
 		&i.FirmwareVersion,
 		&i.Metadata,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getSensorByDeviceUIDAndKey = `-- name: GetSensorByDeviceUIDAndKey :one
+SELECT s.id, s.device_id, s.module_id, s.sensor_key, s.sensor_type, s.unit, s.enabled, s.calibration, s.metadata, s.created_at, s.updated_at
+FROM sensors s
+JOIN devices d ON d.id = s.device_id
+WHERE d.device_uid = $1
+  AND s.sensor_key = $2
+  AND s.enabled = true
+`
+
+type GetSensorByDeviceUIDAndKeyParams struct {
+	DeviceUid string `db:"device_uid" json:"device_uid"`
+	SensorKey string `db:"sensor_key" json:"sensor_key"`
+}
+
+func (q *Queries) GetSensorByDeviceUIDAndKey(ctx context.Context, arg GetSensorByDeviceUIDAndKeyParams) (Sensor, error) {
+	row := q.db.QueryRow(ctx, getSensorByDeviceUIDAndKey, arg.DeviceUid, arg.SensorKey)
+	var i Sensor
+	err := row.Scan(
+		&i.ID,
+		&i.DeviceID,
+		&i.ModuleID,
+		&i.SensorKey,
+		&i.SensorType,
+		&i.Unit,
+		&i.Enabled,
+		&i.Calibration,
+		&i.Metadata,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -161,4 +287,92 @@ func (q *Queries) ListSensorReadings(ctx context.Context, arg ListSensorReadings
 		return nil, err
 	}
 	return items, nil
+}
+
+const touchDeviceLastSeen = `-- name: TouchDeviceLastSeen :exec
+UPDATE devices
+SET
+  last_seen_at = $2,
+  status = COALESCE($3, status),
+  firmware_version = COALESCE($4, firmware_version),
+  updated_at = now()
+WHERE id = $1
+`
+
+type TouchDeviceLastSeenParams struct {
+	ID              pgtype.UUID        `db:"id" json:"id"`
+	LastSeenAt      pgtype.Timestamptz `db:"last_seen_at" json:"last_seen_at"`
+	Status          string             `db:"status" json:"status"`
+	FirmwareVersion pgtype.Text        `db:"firmware_version" json:"firmware_version"`
+}
+
+func (q *Queries) TouchDeviceLastSeen(ctx context.Context, arg TouchDeviceLastSeenParams) error {
+	_, err := q.db.Exec(ctx, touchDeviceLastSeen,
+		arg.ID,
+		arg.LastSeenAt,
+		arg.Status,
+		arg.FirmwareVersion,
+	)
+	return err
+}
+
+const touchDeviceLastSeenByUID = `-- name: TouchDeviceLastSeenByUID :exec
+UPDATE devices
+SET
+  last_seen_at = $2,
+  status = COALESCE($3, status),
+  firmware_version = COALESCE($4, firmware_version),
+  updated_at = now()
+WHERE device_uid = $1
+`
+
+type TouchDeviceLastSeenByUIDParams struct {
+	DeviceUid       string             `db:"device_uid" json:"device_uid"`
+	LastSeenAt      pgtype.Timestamptz `db:"last_seen_at" json:"last_seen_at"`
+	Status          string             `db:"status" json:"status"`
+	FirmwareVersion pgtype.Text        `db:"firmware_version" json:"firmware_version"`
+}
+
+func (q *Queries) TouchDeviceLastSeenByUID(ctx context.Context, arg TouchDeviceLastSeenByUIDParams) error {
+	_, err := q.db.Exec(ctx, touchDeviceLastSeenByUID,
+		arg.DeviceUid,
+		arg.LastSeenAt,
+		arg.Status,
+		arg.FirmwareVersion,
+	)
+	return err
+}
+
+const updateOtaJobStatus = `-- name: UpdateOtaJobStatus :exec
+UPDATE ota_jobs
+SET
+  status = $3,
+  started_at = CASE WHEN $3 IN ('running', 'in_progress') AND started_at IS NULL THEN $4 ELSE started_at END,
+  completed_at = CASE WHEN $3 IN ('completed', 'failed', 'cancelled') THEN $4 ELSE completed_at END,
+  error_message = $5,
+  metadata = metadata || $6,
+  updated_at = now()
+WHERE id = $1
+  AND device_id = $2
+`
+
+type UpdateOtaJobStatusParams struct {
+	ID           pgtype.UUID        `db:"id" json:"id"`
+	DeviceID     pgtype.UUID        `db:"device_id" json:"device_id"`
+	Status       string             `db:"status" json:"status"`
+	StartedAt    pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	ErrorMessage pgtype.Text        `db:"error_message" json:"error_message"`
+	Metadata     []byte             `db:"metadata" json:"metadata"`
+}
+
+func (q *Queries) UpdateOtaJobStatus(ctx context.Context, arg UpdateOtaJobStatusParams) error {
+	_, err := q.db.Exec(ctx, updateOtaJobStatus,
+		arg.ID,
+		arg.DeviceID,
+		arg.Status,
+		arg.StartedAt,
+		arg.ErrorMessage,
+		arg.Metadata,
+	)
+	return err
 }

@@ -29,6 +29,7 @@ ESP32 devices
 
 mon-01:
 Grafana + Prometheus + Loki + Alloy
+(repo homelab monitoring separata)
 ```
 
 ## Vincoli

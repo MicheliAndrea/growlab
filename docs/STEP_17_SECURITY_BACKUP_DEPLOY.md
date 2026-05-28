@@ -1,5 +1,9 @@
 # STEP 17 — Security, Backup, Deploy
 
+## Stato
+
+Completato.
+
 ## Sicurezza
 
 - no auth iniziale
@@ -19,9 +23,63 @@
 - configurazioni docker
 - .env
 - repository Git
+- monitoring homelab escluso dal backup GrowLab
 
 ## Deploy
 
 - app-01: web/api/worker/emqx/redis/ollama
 - pg-01: PostgreSQL/TimescaleDB
-- mon-01: monitoring stack
+- mon-01: monitoring stack esterno in repo homelab dedicata
+
+## File aggiunti
+
+- `docs/SECURITY_BASELINE.md`
+- `docs/BACKUP_RESTORE.md`
+- `docs/DEPLOYMENT_RUNBOOK.md`
+- `infrastructure/scripts/growlab_backup.sh`
+- `infrastructure/scripts/growlab_restore.sh`
+- `infrastructure/scripts/security_check.sh`
+
+## Hardening Compose
+
+- `growlab-web`, `growlab-api`, `growlab-worker` metrics, MQTT ed EMQX dashboard usano `GROWLAB_LAN_BIND`.
+- Default `GROWLAB_LAN_BIND=127.0.0.1`.
+- Redis non espone porte.
+- Ollama non espone porte ed e dietro profile `ai`.
+- CORS configurabile tramite `GROWLAB_CORS_ORIGINS`.
+
+## Backup
+
+`make backup` esegue `infrastructure/scripts/growlab_backup.sh`.
+
+Il backup include:
+
+- dump PostgreSQL custom, se `pg_dump` e disponibile;
+- volume `growlab_images`;
+- volume `growlab_firmware`;
+- configurazioni Docker;
+- `.env` locali se presenti;
+- bundle Git e status repository.
+
+La repo homelab monitoring viene salvata con backup separato.
+
+## Restore
+
+Restore protetto da conferma esplicita:
+
+```bash
+GROWLAB_RESTORE_CONFIRM=restore bash infrastructure/scripts/growlab_restore.sh /path/to/backup
+```
+
+## Verifica sicurezza
+
+```bash
+make security-check
+```
+
+Controlla:
+
+- `.env` ignorato da git;
+- Redis e Ollama senza porte pubblicate;
+- API/web/worker metrics/MQTT su `GROWLAB_LAN_BIND`;
+- CORS env cablato.

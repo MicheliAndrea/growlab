@@ -11,6 +11,41 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createPlantEvent = `-- name: CreatePlantEvent :one
+INSERT INTO plant_events (plant_id, event_type, occurred_at, notes, metadata)
+VALUES ($1, $2, COALESCE($3::timestamptz, now()), $4, $5)
+RETURNING id, plant_id, event_type, occurred_at, notes, metadata, created_at
+`
+
+type CreatePlantEventParams struct {
+	PlantID   pgtype.UUID        `db:"plant_id" json:"plant_id"`
+	EventType string             `db:"event_type" json:"event_type"`
+	Column3   pgtype.Timestamptz `db:"column_3" json:"column_3"`
+	Notes     pgtype.Text        `db:"notes" json:"notes"`
+	Metadata  []byte             `db:"metadata" json:"metadata"`
+}
+
+func (q *Queries) CreatePlantEvent(ctx context.Context, arg CreatePlantEventParams) (PlantEvent, error) {
+	row := q.db.QueryRow(ctx, createPlantEvent,
+		arg.PlantID,
+		arg.EventType,
+		arg.Column3,
+		arg.Notes,
+		arg.Metadata,
+	)
+	var i PlantEvent
+	err := row.Scan(
+		&i.ID,
+		&i.PlantID,
+		&i.EventType,
+		&i.OccurredAt,
+		&i.Notes,
+		&i.Metadata,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getPlant = `-- name: GetPlant :one
 SELECT id, zone_id, species_id, name, code, status, planted_at, acquired_at, metadata, created_at, updated_at, current_health_status FROM plants WHERE id = $1
 `
@@ -31,6 +66,32 @@ func (q *Queries) GetPlant(ctx context.Context, id pgtype.UUID) (Plant, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CurrentHealthStatus,
+	)
+	return i, err
+}
+
+const getPlantImage = `-- name: GetPlantImage :one
+SELECT id, plant_id, storage_path, original_filename, content_type, size_bytes, checksum_sha256, captured_at, uploaded_at, metadata, created_at, growth_stage, growth_tracking, zone_id FROM plant_images WHERE id = $1
+`
+
+func (q *Queries) GetPlantImage(ctx context.Context, id pgtype.UUID) (PlantImage, error) {
+	row := q.db.QueryRow(ctx, getPlantImage, id)
+	var i PlantImage
+	err := row.Scan(
+		&i.ID,
+		&i.PlantID,
+		&i.StoragePath,
+		&i.OriginalFilename,
+		&i.ContentType,
+		&i.SizeBytes,
+		&i.ChecksumSha256,
+		&i.CapturedAt,
+		&i.UploadedAt,
+		&i.Metadata,
+		&i.CreatedAt,
+		&i.GrowthStage,
+		&i.GrowthTracking,
+		&i.ZoneID,
 	)
 	return i, err
 }
@@ -68,7 +129,7 @@ func (q *Queries) ListPlantEvents(ctx context.Context, plantID pgtype.UUID) ([]P
 }
 
 const listPlantImages = `-- name: ListPlantImages :many
-SELECT id, plant_id, storage_path, original_filename, content_type, size_bytes, checksum_sha256, captured_at, uploaded_at, metadata, created_at, growth_stage, growth_tracking FROM plant_images WHERE plant_id = $1 ORDER BY uploaded_at DESC
+SELECT id, plant_id, storage_path, original_filename, content_type, size_bytes, checksum_sha256, captured_at, uploaded_at, metadata, created_at, growth_stage, growth_tracking, zone_id FROM plant_images WHERE plant_id = $1 ORDER BY uploaded_at DESC
 `
 
 func (q *Queries) ListPlantImages(ctx context.Context, plantID pgtype.UUID) ([]PlantImage, error) {
@@ -94,6 +155,7 @@ func (q *Queries) ListPlantImages(ctx context.Context, plantID pgtype.UUID) ([]P
 			&i.CreatedAt,
 			&i.GrowthStage,
 			&i.GrowthTracking,
+			&i.ZoneID,
 		); err != nil {
 			return nil, err
 		}

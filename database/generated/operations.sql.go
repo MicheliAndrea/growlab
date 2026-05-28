@@ -168,6 +168,39 @@ func (q *Queries) ListIrrigationSystemsByZone(ctx context.Context, zoneID pgtype
 	return items, nil
 }
 
+const listLightingEvents = `-- name: ListLightingEvents :many
+SELECT id, lighting_system_id, event_type, occurred_at, brightness_percent, source, metadata, created_at FROM lighting_events WHERE lighting_system_id = $1 ORDER BY occurred_at DESC LIMIT 100
+`
+
+func (q *Queries) ListLightingEvents(ctx context.Context, lightingSystemID pgtype.UUID) ([]LightingEvent, error) {
+	rows, err := q.db.Query(ctx, listLightingEvents, lightingSystemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []LightingEvent{}
+	for rows.Next() {
+		var i LightingEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.LightingSystemID,
+			&i.EventType,
+			&i.OccurredAt,
+			&i.BrightnessPercent,
+			&i.Source,
+			&i.Metadata,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLightingSchedules = `-- name: ListLightingSchedules :many
 SELECT id, lighting_system_id, name, enabled, timezone, starts_at, ends_at, brightness_percent, days_of_week, config, metadata, created_at, updated_at FROM lighting_schedules WHERE lighting_system_id = $1 ORDER BY starts_at
 `

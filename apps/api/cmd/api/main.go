@@ -12,8 +12,12 @@ import (
 
 	"growlab/apps/api/internal/config"
 	"growlab/apps/api/internal/database"
+	"growlab/apps/api/internal/handlers"
 	httpapi "growlab/apps/api/internal/http"
 	"growlab/apps/api/internal/metrics"
+	"growlab/apps/api/internal/repositories"
+	"growlab/apps/api/internal/services"
+	"growlab/apps/api/internal/shelly"
 )
 
 func main() {
@@ -59,6 +63,23 @@ func main() {
 	router := httpapi.NewRouter(httpapi.RouterOptions{
 		Config:  cfg,
 		Metrics: apiMetrics,
+		DomainHandler: handlers.NewDomainHandler(
+			services.NewDomainService(
+				repositories.New(postgresPool),
+				shelly.NewClient(cfg.ShellyTimeout),
+				cfg.PublicAPIURL,
+				services.IrrigationSafetyConfig{
+					ManualFlagConfigured:     cfg.FeatureIrrigationManual,
+					AutomationFlagConfigured: cfg.FeatureIrrigationAutomation,
+				},
+			),
+			handlers.DomainHandlerOptions{
+				ImageStoragePath:       cfg.ImageStoragePath,
+				ImageUploadMaxBytes:    cfg.ImageUploadMaxBytes,
+				FirmwareStoragePath:    cfg.FirmwareStoragePath,
+				FirmwareUploadMaxBytes: cfg.FirmwareUploadMaxBytes,
+			},
+		),
 	})
 
 	server := &http.Server{

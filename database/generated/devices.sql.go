@@ -12,7 +12,7 @@ import (
 )
 
 const getDevice = `-- name: GetDevice :one
-SELECT id, zone_id, device_uid, name, device_type, status, firmware_version, config, metadata, created_at, updated_at, firmware_channel_id FROM devices WHERE id = $1
+SELECT id, zone_id, device_uid, name, device_type, status, firmware_version, config, metadata, created_at, updated_at, firmware_channel_id, last_seen_at FROM devices WHERE id = $1
 `
 
 func (q *Queries) GetDevice(ctx context.Context, id pgtype.UUID) (Device, error) {
@@ -31,12 +31,13 @@ func (q *Queries) GetDevice(ctx context.Context, id pgtype.UUID) (Device, error)
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.FirmwareChannelID,
+		&i.LastSeenAt,
 	)
 	return i, err
 }
 
 const getDeviceByUID = `-- name: GetDeviceByUID :one
-SELECT id, zone_id, device_uid, name, device_type, status, firmware_version, config, metadata, created_at, updated_at, firmware_channel_id FROM devices WHERE device_uid = $1
+SELECT id, zone_id, device_uid, name, device_type, status, firmware_version, config, metadata, created_at, updated_at, firmware_channel_id, last_seen_at FROM devices WHERE device_uid = $1
 `
 
 func (q *Queries) GetDeviceByUID(ctx context.Context, deviceUid string) (Device, error) {
@@ -55,6 +56,7 @@ func (q *Queries) GetDeviceByUID(ctx context.Context, deviceUid string) (Device,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.FirmwareChannelID,
+		&i.LastSeenAt,
 	)
 	return i, err
 }
@@ -138,7 +140,7 @@ func (q *Queries) ListDeviceModules(ctx context.Context, deviceID pgtype.UUID) (
 }
 
 const listDevicesByZone = `-- name: ListDevicesByZone :many
-SELECT id, zone_id, device_uid, name, device_type, status, firmware_version, config, metadata, created_at, updated_at, firmware_channel_id FROM devices WHERE zone_id = $1 ORDER BY name
+SELECT id, zone_id, device_uid, name, device_type, status, firmware_version, config, metadata, created_at, updated_at, firmware_channel_id, last_seen_at FROM devices WHERE zone_id = $1 ORDER BY name
 `
 
 func (q *Queries) ListDevicesByZone(ctx context.Context, zoneID pgtype.UUID) ([]Device, error) {
@@ -163,6 +165,7 @@ func (q *Queries) ListDevicesByZone(ctx context.Context, zoneID pgtype.UUID) ([]
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.FirmwareChannelID,
+			&i.LastSeenAt,
 		); err != nil {
 			return nil, err
 		}

@@ -61,6 +61,21 @@ STEP 03B aggiunge:
 - OTA dry-run metadata;
 - metadata per photo timeline/growth tracking.
 
+## STEP 07 collegato
+
+Il worker MQTT introduce la migrazione incrementale:
+
+```text
+database/migrations/000003_worker_mqtt_ingestion.sql
+```
+
+STEP 07 aggiunge:
+
+- `devices.last_seen_at` per tracciare l'ultimo messaggio ricevuto dal device;
+- query sqlc per insert `sensor_readings`;
+- query sqlc per insert `device_heartbeats`;
+- query sqlc per aggiornamento last-seen device e stato OTA job.
+
 ## Regole
 
 - UUID primary key.
