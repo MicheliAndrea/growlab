@@ -7,6 +7,7 @@ import { CheckCircle2, PlayCircle } from "lucide-react";
 import {
   EmptyState,
   formatDateTime,
+  DataPanel,
   Row,
   RowList,
   StatusBadge,
@@ -23,6 +24,7 @@ import {
 
 const selectClass =
   "mt-2 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const defaultMetadata = JSON.stringify({}, null, 2);
 
 export function OtaControlPanel({
   devices,
@@ -35,6 +37,7 @@ export function OtaControlPanel({
   const [selectedDeviceId, setSelectedDeviceId] = React.useState("");
   const [selectedFirmwareVersionId, setSelectedFirmwareVersionId] =
     React.useState("");
+  const [dryRunMetadata, setDryRunMetadata] = React.useState(defaultMetadata);
   const [lastDryRun, setLastDryRun] = React.useState<OtaDryRun | null>(null);
   const deviceId = selectedDeviceId || devices[0]?.id || "";
   const firmwareVersionId =
@@ -51,6 +54,7 @@ export function OtaControlPanel({
     mutationFn: () =>
       createDeviceOtaDryRun(deviceId, {
         firmwareVersionId,
+        metadata: parseOptionalJsonObject(dryRunMetadata, "dry-run metadata"),
       }),
     onSuccess: (result) => setLastDryRun(result),
   });
@@ -71,6 +75,9 @@ export function OtaControlPanel({
     (version) => version.id === firmwareVersionId,
   );
   const formDisabled = !deviceId || !firmwareVersionId;
+  const reportEntries = lastDryRun
+    ? renderReportEntries(lastDryRun.compatibilityReport)
+    : [];
 
   return (
     <div className="grid gap-4">
@@ -115,6 +122,16 @@ export function OtaControlPanel({
         </div>
       </div>
 
+      <div>
+        <Label htmlFor="ota-metadata">Dry-run metadata</Label>
+        <textarea
+          id="ota-metadata"
+          value={dryRunMetadata}
+          onChange={(event) => setDryRunMetadata(event.target.value)}
+          className="mt-2 min-h-28 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+      </div>
+
       <div className="flex flex-wrap gap-2">
         <Button
           disabled={formDisabled || dryRunMutation.isPending}
@@ -142,13 +159,45 @@ export function OtaControlPanel({
       ) : null}
 
       {lastDryRun ? (
-        <RowList>
-          <Row
-            title="Last dry-run"
-            detail={selectedFirmware?.version}
-            meta={<StatusBadge value={lastDryRun.status} />}
-          />
-        </RowList>
+        <div className="grid gap-3">
+          <RowList>
+            <Row
+              title="Last dry-run"
+              detail={selectedFirmware?.version}
+              meta={<StatusBadge value={lastDryRun.status} />}
+            />
+            <Row
+              title="Requested"
+              detail={formatDateTime(lastDryRun.requestedAt)}
+            />
+            <Row
+              title="Completed"
+              detail={formatDateTime(lastDryRun.completedAt)}
+            />
+          </RowList>
+
+          <DataPanel title="Compatibility report" description="Dry-run output.">
+            <div className="grid gap-2">
+              {reportEntries.length > 0 ? (
+                reportEntries.map((entry) => (
+                  <div
+                    key={entry.label}
+                    className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2 text-xs"
+                  >
+                    <span className="font-medium capitalize">
+                      {entry.label}
+                    </span>
+                    <span className="truncate text-muted-foreground">
+                      {entry.value}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <EmptyState title="Empty compatibility report" />
+              )}
+            </div>
+          </DataPanel>
+        </div>
       ) : null}
 
       {jobs.data && jobs.data.length > 0 ? (
@@ -189,4 +238,46 @@ function mqttTopic(job: OtaJob) {
   }
   const topic = (command as { topic?: unknown }).topic;
   return typeof topic === "string" ? topic : null;
+}
+
+function parseOptionalJsonObject(value: string, label: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const parsed = JSON.parse(trimmed) as unknown;
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`${label} must be a JSON object.`);
+  }
+
+  return parsed as Record<string, unknown>;
+}
+
+function renderReportEntries(report: Record<string, unknown>) {
+  return Object.entries(report)
+    .slice(0, 8)
+    .map(([label, value]) => ({
+      label,
+      value: formatReportValue(value),
+    }));
+}
+
+function formatReportValue(value: unknown) {
+  if (Array.isArray(value)) {
+    return `${value.length} item${value.length === 1 ? "" : "s"}`;
+  }
+
+  if (value === null || value === undefined) {
+    return "unset";
+  }
+
+  if (typeof value === "object") {
+    const keys = Object.keys(value as Record<string, unknown>);
+    return keys.length > 0
+      ? `${keys.length} field${keys.length === 1 ? "" : "s"}`
+      : "{}";
+  }
+
+  return String(value);
 }

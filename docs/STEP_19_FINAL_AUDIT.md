@@ -114,6 +114,6 @@ git diff --check
 
 ## Note operative
 
-- `make migrate-up` non e stato eseguito durante l'audit per non applicare modifiche al database esterno `pg-01`.
+- `make migrate-up` non e stato eseguito durante l'audit per non applicare modifiche al database esterno `db-host`.
 - `go test ./...`, `go build ./...`, `pnpm build`, `make build` e `make test` restano esclusi senza consenso esplicito.
 - Non sono stati avviati container o dev server.

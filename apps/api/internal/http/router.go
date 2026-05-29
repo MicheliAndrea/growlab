@@ -89,6 +89,8 @@ func registerDomainRoutes(router *gin.Engine, domain *handlers.DomainHandler) {
 	router.GET("/api/devices/:id", domain.GetDevice)
 	router.GET("/api/devices/:id/capabilities", domain.ListDeviceCapabilities)
 	router.GET("/api/devices/:id/provisioning", domain.GetDeviceProvisioning)
+	router.POST("/api/devices/:id/provisioning", domain.CreateDeviceProvisioning)
+	router.POST("/api/provisioning/claim", domain.ClaimDeviceProvisioning)
 	router.GET("/api/sensors/:id/calibrations", domain.ListSensorCalibrations)
 	router.POST("/api/sensors/:id/calibrations", domain.CreateSensorCalibration)
 

@@ -43,6 +43,18 @@ type OTAStatus struct {
 	Metadata     []byte
 }
 
+type SystemEvent struct {
+	EventType  string
+	Severity   string
+	Source     string
+	DeviceID   *string
+	ZoneID     *string
+	PlantID    *string
+	Message    string
+	Metadata   []byte
+	OccurredAt time.Time
+}
+
 func New(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool}
 }
@@ -162,6 +174,57 @@ WHERE device_uid = $1`,
 		return ErrNotFound
 	}
 	return nil
+}
+
+func (s *Store) DeviceStatusByID(ctx context.Context, deviceID string) (string, error) {
+	var status string
+	err := s.pool.QueryRow(ctx, `SELECT COALESCE(status, '') FROM devices WHERE id = $1::uuid`, deviceID).Scan(&status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return status, err
+}
+
+func (s *Store) OTAJobStatus(ctx context.Context, jobID string) (string, error) {
+	var status string
+	err := s.pool.QueryRow(ctx, `SELECT COALESCE(status, '') FROM ota_jobs WHERE id = $1::uuid`, jobID).Scan(&status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return status, err
+}
+
+func (s *Store) InsertSystemEvent(ctx context.Context, event SystemEvent) error {
+	metadata := event.Metadata
+	if len(metadata) == 0 {
+		metadata = []byte("{}")
+	}
+	severity := event.Severity
+	if severity == "" {
+		severity = "info"
+	}
+	source := event.Source
+	if source == "" {
+		source = "worker"
+	}
+	occurredAt := event.OccurredAt
+	if occurredAt.IsZero() {
+		occurredAt = time.Now().UTC()
+	}
+	_, err := s.pool.Exec(ctx, `
+INSERT INTO system_events (event_type, severity, source, zone_id, plant_id, device_id, message, metadata, occurred_at)
+VALUES ($1, $2, $3, $4::uuid, $5::uuid, $6::uuid, $7, $8::jsonb, $9)`,
+		event.EventType,
+		severity,
+		source,
+		nullableString(event.ZoneID),
+		nullableString(event.PlantID),
+		nullableString(event.DeviceID),
+		event.Message,
+		metadata,
+		occurredAt,
+	)
+	return err
 }
 
 func (s *Store) UpdateOTAStatus(ctx context.Context, status OTAStatus) error {

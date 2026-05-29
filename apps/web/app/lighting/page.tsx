@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Clock3, Lightbulb, RefreshCcw } from "lucide-react";
 
 import { LightingControlCard } from "@/components/lighting/lighting-control-card";
+import { LightingProfileForm } from "@/components/lighting/lighting-profile-form";
 import { Button } from "@/components/ui/button";
 import {
   DataNotice,
@@ -18,6 +19,7 @@ import {
 import {
   fetchLightingProfiles,
   fetchLightingSystems,
+  fetchZones,
   queryKeys,
 } from "@/lib/queries";
 
@@ -28,6 +30,11 @@ export default function LightingPage() {
   const systems = useQuery({
     queryKey: queryKeys.lightingSystems,
     queryFn: fetchLightingSystems,
+    refetchInterval: poll,
+  });
+  const zones = useQuery({
+    queryKey: queryKeys.zones,
+    queryFn: fetchZones,
     refetchInterval: poll,
   });
   const profiles = useQuery({
@@ -112,6 +119,21 @@ export default function LightingPage() {
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+        <DataPanel
+          title="Create profile"
+          description="Lighting schedule setup."
+        >
+          {zones.isLoading || systems.isLoading ? (
+            <DataNotice state="loading" />
+          ) : null}
+          {zones.isError || systems.isError ? (
+            <DataNotice state="error" />
+          ) : null}
+          {zones.data && systems.data ? (
+            <LightingProfileForm zones={zones.data} systems={systems.data} />
+          ) : null}
+        </DataPanel>
+
         <DataPanel title="Profiles" description="Zone lighting schedules.">
           {profiles.isLoading ? <DataNotice state="loading" /> : null}
           {profiles.isError ? <DataNotice state="error" /> : null}
@@ -121,13 +143,17 @@ export default function LightingPage() {
                 <Row
                   key={profile.id}
                   title={profile.name}
-                  detail={`${profile.steps.length} steps - ${profile.timezone}`}
+                  detail={`${profile.steps.length} steps - ${profile.timezone} - zone ${profile.zoneId}`}
                   meta={
                     <StatusBadge
                       value={profile.enabled ? "active" : "offline"}
                     />
                   }
-                />
+                >
+                  <StatusBadge
+                    value={profile.isDefault ? "default" : "custom"}
+                  />
+                </Row>
               ))}
             </RowList>
           ) : !profiles.isLoading && !profiles.isError ? (

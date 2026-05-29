@@ -255,6 +255,27 @@ func (h *DomainHandler) GetDeviceProvisioning(c *gin.Context) {
 	respondOne(c, h.service.GetDeviceProvisioning(c.Request.Context(), c.Param("id")))
 }
 
+func (h *DomainHandler) CreateDeviceProvisioning(c *gin.Context) {
+	body, ok := bindJSONMap(c)
+	if !ok {
+		return
+	}
+	respondCreated(c, h.service.CreateDeviceProvisioning(c.Request.Context(), c.Param("id"), body))
+}
+
+func (h *DomainHandler) ClaimDeviceProvisioning(c *gin.Context) {
+	body, ok := bindJSONMap(c)
+	if !ok {
+		return
+	}
+	token, _ := body["token"].(string)
+	if token == "" {
+		JSONError(c, http.StatusBadRequest, "INVALID_REQUEST", "token is required")
+		return
+	}
+	respondOne(c, h.service.ClaimDeviceProvisioning(c.Request.Context(), token))
+}
+
 func (h *DomainHandler) ListSensorCalibrations(c *gin.Context) {
 	respond(c, h.service.ListSensorCalibrations(c.Request.Context(), c.Param("id")))
 }

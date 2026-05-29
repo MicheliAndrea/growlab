@@ -2,9 +2,9 @@
 
 ## Topology
 
-- `app-01`: `growlab-web`, `growlab-api`, `growlab-worker`, EMQX, Redis, optional Ollama.
-- `pg-01`: PostgreSQL/TimescaleDB.
-- `mon-01`: Grafana, Prometheus, Loki, Alloy from the separate homelab monitoring repository.
+- `app-host`: `growlab-web`, `growlab-api`, `growlab-worker`, EMQX, Redis, optional Ollama.
+- `db-host`: PostgreSQL/TimescaleDB.
+- `monitoring-host`: Grafana, Prometheus, Loki, Alloy from the separate homelab monitoring repository.
 
 ## Security Baseline
 
@@ -17,7 +17,7 @@
 - API, web and worker metrics bind through `GROWLAB_LAN_BIND`.
 - Keep `GROWLAB_CORS_ORIGINS` restricted to the actual web origins.
 
-## app-01 Deploy
+## app-host Deploy
 
 1. Clone repository.
 2. Create env file:
@@ -48,7 +48,7 @@ make security-check
 docker compose -f infrastructure/docker/docker-compose.yml up -d
 ```
 
-## pg-01 Database
+## db-host Database
 
 - PostgreSQL/TimescaleDB is external to the app compose.
 - Run goose migrations from the app repository with the real database `.env`.
@@ -57,25 +57,25 @@ docker compose -f infrastructure/docker/docker-compose.yml up -d
 make migrate-up
 ```
 
-## mon-01 Monitoring
+## monitoring-host Monitoring
 
 Monitoring is managed outside this repository:
 
 ```text
-/home/andrea/projects/homelab-monitoring
+homelab-monitoring
 ```
 
 GrowLab integration points for that repo:
 
-- API metrics: `app-01:8080/metrics`
-- worker metrics: `app-01:9091/metrics`
+- API metrics: `app-host:8080/metrics`
+- worker metrics: `app-host:9091/metrics`
 - optional PostgreSQL/TimescaleDB Grafana datasource
-- optional Alloy agent on `app-01` for Docker logs
+- optional Alloy agent on `app-host` for Docker logs
 
 Validate and start monitoring from the monitoring repository:
 
 ```bash
-cd /home/andrea/projects/homelab-monitoring
+cd homelab-monitoring
 docker compose --env-file .env.example -f docker-compose.yml config
 docker compose --env-file .env -f docker-compose.yml up -d
 ```
@@ -84,7 +84,7 @@ docker compose --env-file .env -f docker-compose.yml up -d
 
 Run from a host with access to:
 
-- `pg-01`
+- `db-host`
 - Docker volumes for `growlab_images` and `growlab_firmware`
 - the GrowLab repository
 

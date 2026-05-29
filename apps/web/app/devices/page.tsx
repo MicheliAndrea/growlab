@@ -2,6 +2,7 @@
 
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Cpu, Gauge, RefreshCcw, ShieldCheck } from "lucide-react";
+import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -15,9 +16,11 @@ import {
   RowList,
   StatusBadge,
 } from "@/components/dashboard/ui";
+import { ExportButton } from "@/components/dashboard/export-button";
+import { DeviceProvisioningPanel } from "@/components/devices/device-provisioning-panel";
+import { SensorCalibrationPanel } from "@/components/devices/sensor-calibration-panel";
 import {
   fetchDeviceCapabilities,
-  fetchDeviceProvisioning,
   fetchDevices,
   queryKeys,
 } from "@/lib/queries";
@@ -38,13 +41,6 @@ export default function DevicesPage() {
       refetchInterval: poll,
     })),
   });
-  const provisioningQueries = useQueries({
-    queries: (devices.data ?? []).map((device) => ({
-      queryKey: queryKeys.deviceProvisioning(device.id),
-      queryFn: () => fetchDeviceProvisioning(device.id),
-      refetchInterval: poll,
-    })),
-  });
 
   const capabilityCount = capabilityQueries.reduce(
     (count, query) => count + (query.data?.length ?? 0),
@@ -52,9 +48,6 @@ export default function DevicesPage() {
   );
   const onlineDevices =
     devices.data?.filter((device) => device.status === "online").length ?? 0;
-  const provisioningCount = provisioningQueries.filter(
-    (query) => query.data,
-  ).length;
 
   return (
     <div className="grid gap-6">
@@ -63,14 +56,32 @@ export default function DevicesPage() {
         title="Device Fleet"
         description="Controllers, capabilities and provisioning metadata."
       >
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void queryClient.invalidateQueries()}
-        >
-          <RefreshCcw className="h-4 w-4" aria-hidden="true" />
-          Refresh
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <ExportButton
+            jsonFilename="devices.json"
+            csvFilename="devices.csv"
+            data={devices.data ?? []}
+            csvRows={(devices.data ?? []).map((device) => ({
+              id: device.id,
+              name: device.name,
+              deviceUid: device.deviceUid,
+              deviceType: device.deviceType,
+              status: device.status,
+              zoneId: device.zoneId ?? "",
+              firmwareVersion: device.firmwareVersion ?? "",
+              firmwareChannelId: device.firmwareChannelId ?? "",
+              lastSeenAt: device.lastSeenAt ?? "",
+            }))}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void queryClient.invalidateQueries()}
+          >
+            <RefreshCcw className="h-4 w-4" aria-hidden="true" />
+            Refresh
+          </Button>
+        </div>
       </PageHeader>
 
       <section className="grid gap-3 md:grid-cols-3">
@@ -111,6 +122,9 @@ export default function DevicesPage() {
                   <span className="text-xs text-muted-foreground">
                     {formatDateTime(device.lastSeenAt)}
                   </span>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href={`/devices/${device.id}`}>Open</Link>
+                  </Button>
                 </Row>
               ))}
             </RowList>
@@ -148,23 +162,18 @@ export default function DevicesPage() {
         </DataPanel>
       </section>
 
-      <DataPanel title="Provisioning" description="Device claim metadata.">
-        {provisioningCount === 0 ? (
-          <EmptyState title="No provisioning metadata" />
-        ) : (
-          <RowList>
-            {provisioningQueries.map((query, index) =>
-              query.data ? (
-                <Row
-                  key={query.data.id}
-                  title={devices.data?.[index]?.name ?? query.data.id}
-                  detail={formatDateTime(query.data.expiresAt)}
-                  meta={<StatusBadge value={query.data.status} />}
-                />
-              ) : null,
-            )}
-          </RowList>
-        )}
+      <DataPanel
+        title="Provisioning"
+        description="Device claim metadata and config preview."
+      >
+        <DeviceProvisioningPanel devices={devices.data ?? []} />
+      </DataPanel>
+
+      <DataPanel
+        title="Sensor calibration"
+        description="Manual calibration records keyed by sensor id."
+      >
+        <SensorCalibrationPanel />
       </DataPanel>
     </div>
   );

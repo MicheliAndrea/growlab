@@ -6,7 +6,10 @@ import { RefreshCcw } from "lucide-react";
 
 import { ImageGallery } from "@/components/images/image-gallery";
 import { ImageUploadForm } from "@/components/images/image-upload-form";
+import { PlantPhotoTimeline } from "@/components/images/plant-photo-timeline";
+import { ExportButton } from "@/components/dashboard/export-button";
 import { PlantEventForm } from "@/components/plants/plant-event-form";
+import { PlantTaskForm } from "@/components/plants/plant-task-form";
 import { Button } from "@/components/ui/button";
 import {
   DataNotice,
@@ -72,6 +75,29 @@ export function PlantDetail({ plantId }: { plantId: string }) {
         description="Timeline, manual events, checklist and health state."
       >
         <div className="flex flex-wrap gap-2">
+          <ExportButton
+            jsonFilename={`plant-passport-${plantId}.json`}
+            csvFilename={`plant-passport-${plantId}.csv`}
+            data={buildPlantPassport(
+              plant.data,
+              zone?.name,
+              events.data,
+              tasks.data,
+              images.data,
+            )}
+            csvRows={[
+              {
+                id: plant.data?.id ?? "",
+                name: plant.data?.name ?? "",
+                zone: zone?.name ?? plant.data?.zoneId ?? "",
+                health: plant.data?.currentHealthStatus ?? "",
+                status: plant.data?.status ?? "",
+                eventsCount: events.data?.length ?? 0,
+                tasksCount: tasks.data?.length ?? 0,
+                imagesCount: images.data?.length ?? 0,
+              },
+            ]}
+          />
           <Button
             variant="outline"
             size="sm"
@@ -145,6 +171,23 @@ export function PlantDetail({ plantId }: { plantId: string }) {
         </DataPanel>
       </section>
 
+      <DataPanel
+        title="Photo timeline"
+        description="Chronological growth tracking metadata."
+      >
+        {images.isLoading ? <DataNotice state="loading" /> : null}
+        {images.isError ? <DataNotice state="error" /> : null}
+        {images.data ? (
+          <PlantPhotoTimeline
+            images={images.data.map((image) => ({
+              ...image,
+              plantName: plant.data?.name,
+            }))}
+            emptyTitle="No plant photos"
+          />
+        ) : null}
+      </DataPanel>
+
       <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <DataPanel
           title="Timeline"
@@ -195,23 +238,81 @@ export function PlantDetail({ plantId }: { plantId: string }) {
       </section>
 
       <DataPanel title="Checklist" description="Manual plant tasks.">
-        {tasks.isLoading ? <DataNotice state="loading" /> : null}
-        {tasks.isError ? <DataNotice state="error" /> : null}
-        {tasks.data && tasks.data.length > 0 ? (
-          <RowList>
-            {tasks.data.map((task) => (
-              <Row
-                key={task.id}
-                title={task.title}
-                detail={task.description ?? formatDateTime(task.dueAt)}
-                meta={<StatusBadge value={task.status} />}
-              />
-            ))}
-          </RowList>
-        ) : !tasks.isLoading && !tasks.isError ? (
-          <EmptyState title="No manual tasks" />
-        ) : null}
+        <div className="grid gap-4">
+          <PlantTaskForm plantId={plantId} />
+
+          {tasks.isLoading ? <DataNotice state="loading" /> : null}
+          {tasks.isError ? <DataNotice state="error" /> : null}
+          {tasks.data && tasks.data.length > 0 ? (
+            <RowList>
+              {tasks.data.map((task) => (
+                <Row
+                  key={task.id}
+                  title={task.title}
+                  detail={task.description ?? formatDateTime(task.dueAt)}
+                  meta={<StatusBadge value={task.status} />}
+                />
+              ))}
+            </RowList>
+          ) : !tasks.isLoading && !tasks.isError ? (
+            <EmptyState
+              title="No manual tasks"
+              detail="Add the first checklist item above."
+            />
+          ) : null}
+        </div>
       </DataPanel>
     </div>
   );
+}
+
+function buildPlantPassport(
+  plant:
+    | {
+        id: string;
+        name: string;
+        status: string;
+        currentHealthStatus: string;
+        zoneId?: string | null;
+        plantedAt?: string | null;
+        acquiredAt?: string | null;
+      }
+    | undefined,
+  zoneName: string | undefined,
+  events:
+    | {
+        id: string;
+        eventType: string;
+        occurredAt: string;
+        notes?: string | null;
+      }[]
+    | undefined,
+  tasks:
+    | { id: string; title: string; status: string; dueAt?: string | null }[]
+    | undefined,
+  images:
+    | {
+        id: string;
+        capturedAt?: string | null;
+        growthStage?: string | null;
+        tags?: string[];
+      }[]
+    | undefined,
+) {
+  if (!plant) {
+    return {};
+  }
+
+  return {
+    plant,
+    zoneName: zoneName ?? null,
+    summary: {
+      eventsCount: events?.length ?? 0,
+      openTasks: tasks?.filter((task) => task.status !== "done").length ?? 0,
+      imagesCount: images?.length ?? 0,
+    },
+    events: events ?? [],
+    tasks: tasks ?? [],
+    images: images ?? [],
+  };
 }

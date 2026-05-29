@@ -55,7 +55,7 @@ export default function SettingsPage() {
         />
         <MetricCard
           title="Database"
-          value="pg-01"
+          value="db-host"
           detail="External TimescaleDB"
           icon={Database}
         />

@@ -11,7 +11,7 @@ The STEP 17 backup scope covers:
 - Local `.env` files when present.
 - Git repository bundle.
 
-The generic homelab monitoring repository is intentionally out of scope. Back up `/home/andrea/projects/homelab-monitoring` separately with the homelab infrastructure backups.
+The generic homelab monitoring repository is intentionally out of scope. Back up the separate `homelab-monitoring` repository with the homelab infrastructure backups.
 
 ## Backup Command
 
@@ -45,7 +45,7 @@ Docker must be installed and the named volumes must be visible locally:
 - `growlab_images`
 - `growlab_firmware`
 
-If the app runs on `app-01`, run volume backups on `app-01`.
+If the app runs on `app-host`, run volume backups on `app-host`.
 
 ## Restore Command
 

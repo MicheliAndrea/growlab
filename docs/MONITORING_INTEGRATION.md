@@ -7,28 +7,28 @@ GrowLab non contiene lo stack monitoring.
 La configurazione generica per homelab vive nella repo:
 
 ```text
-/home/andrea/projects/homelab-monitoring
+homelab-monitoring
 ```
 
 Questo repository deve solo esporre superfici monitorabili e documentare come agganciarle.
 
 ## Host DNS
 
-Usare nomi stabili nel DNS interno OPNsense:
+Usare nomi stabili nel DNS interno. Esempi:
 
-- `app-01.lab.lan` o alias equivalente per GrowLab app stack
-- `pg-01.lab.lan` o alias equivalente per PostgreSQL/TimescaleDB
-- `mon-01.lab.lan` o alias equivalente per monitoring
+- `app-host.lab.lan` o alias equivalente per GrowLab app stack
+- `db-host.lab.lan` o alias equivalente per PostgreSQL/TimescaleDB
+- `monitoring-host.lab.lan` o alias equivalente per monitoring
 
-Se in rete si preferiscono nomi brevi (`app-01`, `pg-01`, `mon-01`), mantenerli coerenti tra `.env`, Prometheus file service discovery e documentazione operativa.
+Se in rete si preferiscono nomi brevi (`app-host`, `db-host`, `monitoring-host`) o domini diversi, mantenerli coerenti tra `.env`, Prometheus file service discovery e documentazione operativa.
 
 ## Endpoint GrowLab
 
 Endpoint da configurare in Prometheus nella repo monitoring:
 
 ```text
-http://app-01:8080/metrics
-http://app-01:9091/metrics
+http://app-host:8080/metrics
+http://app-host:9091/metrics
 ```
 
 Default:
@@ -38,10 +38,10 @@ Default:
 
 ## Logs
 
-Per log container locali alla VM applicativa, eseguire un Alloy agent sulla VM `app-01` e inviare verso Loki:
+Per log container locali alla VM applicativa, eseguire un Alloy agent sulla VM `app-host` e inviare verso Loki:
 
 ```text
-http://mon-01:3100/loki/api/v1/push
+http://monitoring-host:3100/loki/api/v1/push
 ```
 
 La configurazione Alloy non e versionata in questo repository.

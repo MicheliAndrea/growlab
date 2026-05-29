@@ -12,6 +12,7 @@ import {
   Leaf,
   Lightbulb,
   MonitorCog,
+  Monitor,
   Package,
   Settings,
   Sprout,
@@ -24,6 +25,8 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: MonitorCog },
+  { label: "Kiosk", href: "/kiosk", icon: Monitor },
+  { label: "Operations", href: "/operations", icon: Activity },
   { label: "Plants", href: "/plants", icon: Sprout },
   { label: "Zones", href: "/zones", icon: Boxes },
   { label: "Devices", href: "/devices", icon: Cpu },

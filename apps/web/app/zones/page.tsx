@@ -15,6 +15,7 @@ import {
   RowList,
   StatusBadge,
 } from "@/components/dashboard/ui";
+import { ExportButton } from "@/components/dashboard/export-button";
 import { fetchZoneProfiles, fetchZones, queryKeys } from "@/lib/queries";
 
 const poll = 30_000;
@@ -52,6 +53,19 @@ export default function ZonesPage() {
         description="Grow spaces and attached target profiles."
       >
         <div className="flex flex-wrap gap-2">
+          <ExportButton
+            jsonFilename="zones.json"
+            csvFilename="zones.csv"
+            data={zones.data ?? []}
+            csvRows={(zones.data ?? []).map((zone) => ({
+              id: zone.id,
+              name: zone.name,
+              slug: zone.slug,
+              environmentType: zone.environmentType,
+              growAreaId: zone.growAreaId,
+              updatedAt: zone.updatedAt,
+            }))}
+          />
           <Button
             variant="outline"
             size="sm"

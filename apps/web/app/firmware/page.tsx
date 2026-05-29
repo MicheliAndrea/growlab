@@ -17,6 +17,7 @@ import {
   RowList,
   StatusBadge,
 } from "@/components/dashboard/ui";
+import { ExportButton } from "@/components/dashboard/export-button";
 import {
   fetchDevices,
   fetchFirmwareChannels,
@@ -54,14 +55,28 @@ export default function FirmwarePage() {
         title="Firmware Releases"
         description="OTA artifacts, release channels and dry-run entry points."
       >
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void queryClient.invalidateQueries()}
-        >
-          <RefreshCcw className="h-4 w-4" aria-hidden="true" />
-          Refresh
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <ExportButton
+            jsonFilename="firmware-versions.json"
+            csvFilename="firmware-versions.csv"
+            data={versions.data ?? []}
+            csvRows={(versions.data ?? []).map((version) => ({
+              id: version.id,
+              version: version.version,
+              deviceType: version.deviceType,
+              channelId: version.channelId ?? "",
+              createdAt: version.createdAt,
+            }))}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void queryClient.invalidateQueries()}
+          >
+            <RefreshCcw className="h-4 w-4" aria-hidden="true" />
+            Refresh
+          </Button>
+        </div>
       </PageHeader>
 
       <section className="grid gap-3 md:grid-cols-3">

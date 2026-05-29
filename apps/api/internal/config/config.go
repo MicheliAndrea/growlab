@@ -157,7 +157,7 @@ func postgresDSN() string {
 	}
 	return fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		env("GROWLAB_DB_HOST", "pg-01"),
+		env("GROWLAB_DB_HOST", "db-host"),
 		env("GROWLAB_DB_PORT", "5432"),
 		env("GROWLAB_DB_USER", "growlab"),
 		env("GROWLAB_DB_PASSWORD", "change-me"),

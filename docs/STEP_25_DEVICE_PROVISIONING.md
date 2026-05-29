@@ -2,25 +2,19 @@
 
 ## Stato
 
-Feature V2.
+Implementata nella forma minimale create/claim.
 
 ## Obiettivo
 
 Semplificare aggiunta di nuovi ESP32.
 
-## Flusso futuro
+## Flusso attuale
 
-1. Utente crea nuovo device dalla web app.
-2. Sceglie:
-   - nome;
-   - zona;
-   - moduli sensori;
-   - intervallo telemetria;
-   - intervallo heartbeat;
-   - supporto OTA.
-3. Il sistema genera configurazione.
-4. L’utente copia config o scarica file.
-5. Futuro: QR code provisioning.
+1. Utente seleziona un device esistente.
+2. Definisce `provisioningConfig`, metadata ed eventuale scadenza.
+3. Il backend genera un token una sola volta e salva solo l'hash.
+4. L'interfaccia mostra claim URL, token, QR code e configurazione.
+5. Il token può essere marcato come claimed via endpoint dedicato.
 
 ## Config generata
 
@@ -30,7 +24,7 @@ Esempio:
 {
   "deviceId": "esp32-zone-a-01",
   "deviceName": "Zone A Sensor Node",
-  "mqttHost": "app-01",
+  "mqttHost": "app-host",
   "mqttPort": 1883,
   "baseTopic": "growlab/devices/esp32-zone-a-01",
   "telemetryIntervalSeconds": 60,
@@ -46,14 +40,13 @@ Esempio:
 
 ## QR code provisioning
 
-Il QR code può contenere:
+Il claim URL attuale può contenere:
 
-- device id;
-- MQTT host;
-- MQTT port;
-- base topic;
-- config token futuro;
-- moduli abilitati.
+- token di claim;
+- endpoint di claim;
+- eventuali parametri di bootstrap.
+
+La web app genera anche un QR SVG scansionabile dal claim URL.
 
 ## Device capability model
 
@@ -68,13 +61,12 @@ Ogni device deve dichiarare cosa supporta:
 }
 ```
 
-## Sicurezza futura
+## Sicurezza
 
 - token provisioning temporaneo;
-- credenziali MQTT per device;
 - rotazione credenziali;
 - revoca device.
 
 ## Priorità
 
-Alta, quando inizieranno ad aumentare gli ESP32.
+Alta, ma il flusso base e già operativo.

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"net/netip"
 	"strings"
@@ -19,8 +20,9 @@ var (
 )
 
 type Processor struct {
-	store *store.Store
-	now   func() time.Time
+	store  *store.Store
+	now    func() time.Time
+	logger *slog.Logger
 }
 
 type telemetryPayload struct {
@@ -68,10 +70,26 @@ type otaStatusPayload struct {
 	DeviceVersion string         `json:"deviceFirmwareVersion"`
 }
 
-func New(store *store.Store) *Processor {
+func New(s *store.Store, logger *slog.Logger) *Processor {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &Processor{
-		store: store,
-		now:   time.Now,
+		store:  s,
+		now:    time.Now,
+		logger: logger,
+	}
+}
+
+func (p *Processor) EmitSystemEvent(ctx context.Context, event store.SystemEvent) {
+	if event.OccurredAt.IsZero() {
+		event.OccurredAt = p.now().UTC()
+	}
+	if event.Source == "" {
+		event.Source = "worker"
+	}
+	if err := p.store.InsertSystemEvent(ctx, event); err != nil {
+		p.logger.Warn("system event insert failed", "eventType", event.EventType, "error", err)
 	}
 }
 
@@ -98,6 +116,7 @@ func (p *Processor) Process(ctx context.Context, topic string, payload []byte) e
 func (p *Processor) processTelemetry(ctx context.Context, deviceUID string, payload []byte) error {
 	var msg telemetryPayload
 	if err := json.Unmarshal(payload, &msg); err != nil {
+		p.emitPayloadError(ctx, deviceUID, "telemetry", err)
 		return fmt.Errorf("%w: telemetry JSON: %v", ErrInvalidPayload, err)
 	}
 
@@ -148,6 +167,7 @@ func (p *Processor) processTelemetry(ctx context.Context, deviceUID string, payl
 func (p *Processor) processHeartbeat(ctx context.Context, deviceUID string, payload []byte) error {
 	var msg heartbeatPayload
 	if err := json.Unmarshal(payload, &msg); err != nil {
+		p.emitPayloadError(ctx, deviceUID, "heartbeat", err)
 		return fmt.Errorf("%w: heartbeat JSON: %v", ErrInvalidPayload, err)
 	}
 
@@ -161,10 +181,13 @@ func (p *Processor) processHeartbeat(ctx context.Context, deviceUID string, payl
 	var ipAddress *string
 	if msg.IPAddress != "" {
 		if _, err := netip.ParseAddr(msg.IPAddress); err != nil {
+			p.emitPayloadError(ctx, deviceUID, "heartbeat", fmt.Errorf("invalid ipAddress %q", msg.IPAddress))
 			return fmt.Errorf("%w: invalid ipAddress", ErrInvalidPayload)
 		}
 		ipAddress = &msg.IPAddress
 	}
+
+	previousStatus, _ := p.store.DeviceStatusByID(ctx, deviceID)
 
 	firmwareVersion := stringPtr(msg.FirmwareVersion)
 	if err := p.store.InsertDeviceHeartbeat(ctx, store.Heartbeat{
@@ -180,34 +203,53 @@ func (p *Processor) processHeartbeat(ctx context.Context, deviceUID string, payl
 		return err
 	}
 
-	return p.store.TouchDevice(ctx, store.DeviceTouch{
+	if err := p.store.TouchDevice(ctx, store.DeviceTouch{
 		DeviceID:        deviceID,
 		SeenAt:          observedAt,
 		Status:          &status,
 		FirmwareVersion: firmwareVersion,
-	})
+	}); err != nil {
+		return err
+	}
+
+	p.emitDeviceStatusTransition(ctx, deviceID, deviceUID, previousStatus, status, observedAt)
+	return nil
 }
 
 func (p *Processor) processStatus(ctx context.Context, deviceUID string, payload []byte) error {
 	var msg statusPayload
 	if err := json.Unmarshal(payload, &msg); err != nil {
+		p.emitPayloadError(ctx, deviceUID, "status", err)
 		return fmt.Errorf("%w: status JSON: %v", ErrInvalidPayload, err)
 	}
 	if msg.Status == "" {
 		return fmt.Errorf("%w: status is required", ErrInvalidPayload)
 	}
 
-	return p.store.TouchDevice(ctx, store.DeviceTouch{
-		DeviceUID:       deviceUID,
-		SeenAt:          p.parseTime(msg.ObservedAt),
+	deviceID, err := p.store.DeviceIDByUID(ctx, deviceUID)
+	if err != nil {
+		return err
+	}
+	previousStatus, _ := p.store.DeviceStatusByID(ctx, deviceID)
+
+	observedAt := p.parseTime(msg.ObservedAt)
+	if err := p.store.TouchDevice(ctx, store.DeviceTouch{
+		DeviceID:        deviceID,
+		SeenAt:          observedAt,
 		Status:          &msg.Status,
 		FirmwareVersion: stringPtr(msg.FirmwareVersion),
-	})
+	}); err != nil {
+		return err
+	}
+
+	p.emitDeviceStatusTransition(ctx, deviceID, deviceUID, previousStatus, msg.Status, observedAt)
+	return nil
 }
 
 func (p *Processor) processOTAStatus(ctx context.Context, deviceUID string, payload []byte) error {
 	var msg otaStatusPayload
 	if err := json.Unmarshal(payload, &msg); err != nil {
+		p.emitPayloadError(ctx, deviceUID, "ota_status", err)
 		return fmt.Errorf("%w: ota status JSON: %v", ErrInvalidPayload, err)
 	}
 	if msg.JobID == "" || msg.Status == "" {
@@ -218,6 +260,8 @@ func (p *Processor) processOTAStatus(ctx context.Context, deviceUID string, payl
 	if err != nil {
 		return err
 	}
+
+	previousJobStatus, _ := p.store.OTAJobStatus(ctx, msg.JobID)
 
 	metadata := mergeMetadata(msg.Metadata, map[string]any{})
 	if msg.FirmwareID != "" {
@@ -239,9 +283,136 @@ func (p *Processor) processOTAStatus(ctx context.Context, deviceUID string, payl
 		return err
 	}
 
-	return p.store.TouchDevice(ctx, store.DeviceTouch{
+	if err := p.store.TouchDevice(ctx, store.DeviceTouch{
 		DeviceID: deviceID,
 		SeenAt:   observedAt,
+	}); err != nil {
+		return err
+	}
+
+	p.emitOTAStatusTransition(ctx, deviceID, deviceUID, msg.JobID, previousJobStatus, msg.Status, msg.ErrorMessage, observedAt)
+	return nil
+}
+
+func (p *Processor) emitDeviceStatusTransition(ctx context.Context, deviceID string, deviceUID string, previous string, current string, observedAt time.Time) {
+	if previous == current {
+		return
+	}
+	devID := deviceID
+	meta := map[string]any{
+		"deviceUid":      deviceUID,
+		"previousStatus": previous,
+		"currentStatus":  current,
+	}
+	switch {
+	case current == "offline":
+		p.EmitSystemEvent(ctx, store.SystemEvent{
+			EventType:  "device_offline",
+			Severity:   "warning",
+			Source:     "worker",
+			DeviceID:   &devID,
+			Message:    fmt.Sprintf("device %s reported offline", deviceUID),
+			Metadata:   mustJSON(meta),
+			OccurredAt: observedAt,
+		})
+	case (previous == "" || previous == "offline" || previous == "unknown") && current == "online":
+		p.EmitSystemEvent(ctx, store.SystemEvent{
+			EventType:  "device_online",
+			Severity:   "info",
+			Source:     "worker",
+			DeviceID:   &devID,
+			Message:    fmt.Sprintf("device %s reported online", deviceUID),
+			Metadata:   mustJSON(meta),
+			OccurredAt: observedAt,
+		})
+	default:
+		p.EmitSystemEvent(ctx, store.SystemEvent{
+			EventType:  "device_status_changed",
+			Severity:   "info",
+			Source:     "worker",
+			DeviceID:   &devID,
+			Message:    fmt.Sprintf("device %s status %s -> %s", deviceUID, previous, current),
+			Metadata:   mustJSON(meta),
+			OccurredAt: observedAt,
+		})
+	}
+}
+
+func (p *Processor) emitOTAStatusTransition(ctx context.Context, deviceID string, deviceUID string, jobID string, previous string, current string, errorMessage string, observedAt time.Time) {
+	if previous == current {
+		return
+	}
+	devID := deviceID
+	meta := map[string]any{
+		"deviceUid":      deviceUID,
+		"jobId":          jobID,
+		"previousStatus": previous,
+		"currentStatus":  current,
+	}
+	if errorMessage != "" {
+		meta["errorMessage"] = errorMessage
+	}
+	switch current {
+	case "failed":
+		p.EmitSystemEvent(ctx, store.SystemEvent{
+			EventType:  "ota_failed",
+			Severity:   "error",
+			Source:     "worker",
+			DeviceID:   &devID,
+			Message:    fmt.Sprintf("ota job %s failed on device %s", jobID, deviceUID),
+			Metadata:   mustJSON(meta),
+			OccurredAt: observedAt,
+		})
+	case "completed":
+		p.EmitSystemEvent(ctx, store.SystemEvent{
+			EventType:  "ota_completed",
+			Severity:   "info",
+			Source:     "worker",
+			DeviceID:   &devID,
+			Message:    fmt.Sprintf("ota job %s completed on device %s", jobID, deviceUID),
+			Metadata:   mustJSON(meta),
+			OccurredAt: observedAt,
+		})
+	case "running", "in_progress":
+		p.EmitSystemEvent(ctx, store.SystemEvent{
+			EventType:  "ota_running",
+			Severity:   "info",
+			Source:     "worker",
+			DeviceID:   &devID,
+			Message:    fmt.Sprintf("ota job %s running on device %s", jobID, deviceUID),
+			Metadata:   mustJSON(meta),
+			OccurredAt: observedAt,
+		})
+	case "cancelled":
+		p.EmitSystemEvent(ctx, store.SystemEvent{
+			EventType:  "ota_cancelled",
+			Severity:   "warning",
+			Source:     "worker",
+			DeviceID:   &devID,
+			Message:    fmt.Sprintf("ota job %s cancelled on device %s", jobID, deviceUID),
+			Metadata:   mustJSON(meta),
+			OccurredAt: observedAt,
+		})
+	}
+}
+
+func (p *Processor) emitPayloadError(ctx context.Context, deviceUID string, kind string, parseErr error) {
+	deviceID, err := p.store.DeviceIDByUID(ctx, deviceUID)
+	var devicePtr *string
+	if err == nil && deviceID != "" {
+		devicePtr = &deviceID
+	}
+	p.EmitSystemEvent(ctx, store.SystemEvent{
+		EventType: "payload_invalid",
+		Severity:  "warning",
+		Source:    "worker",
+		DeviceID:  devicePtr,
+		Message:   fmt.Sprintf("invalid %s payload from device %s", kind, deviceUID),
+		Metadata: mustJSON(map[string]any{
+			"deviceUid": deviceUID,
+			"kind":      kind,
+			"error":     parseErr.Error(),
+		}),
 	})
 }
 

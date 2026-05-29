@@ -15,7 +15,7 @@ if [[ -f "${ROOT_DIR}/.env" ]]; then
   set +a
 fi
 
-DB_DSN="${DB_DSN:-host=${GROWLAB_DB_HOST:-pg-01} port=${GROWLAB_DB_PORT:-5432} user=${GROWLAB_DB_USER:-growlab} password=${GROWLAB_DB_PASSWORD:-change-me} dbname=${GROWLAB_DB_NAME:-growlab} sslmode=${GROWLAB_DB_SSLMODE:-require}}"
+DB_DSN="${DB_DSN:-host=${GROWLAB_DB_HOST:-db-host} port=${GROWLAB_DB_PORT:-5432} user=${GROWLAB_DB_USER:-growlab} password=${GROWLAB_DB_PASSWORD:-change-me} dbname=${GROWLAB_DB_NAME:-growlab} sslmode=${GROWLAB_DB_SSLMODE:-require}}"
 
 printf "Creating GrowLab backup in %s\n" "${BACKUP_DIR}"
 
@@ -68,7 +68,7 @@ fi
 {
   printf "created_at=%s\n" "${STAMP}"
   printf "backup_dir=%s\n" "${BACKUP_DIR}"
-  printf "db_host=%s\n" "${GROWLAB_DB_HOST:-pg-01}"
+  printf "db_host=%s\n" "${GROWLAB_DB_HOST:-db-host}"
   printf "db_name=%s\n" "${GROWLAB_DB_NAME:-growlab}"
 } >"${BACKUP_DIR}/MANIFEST.txt"
 

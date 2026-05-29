@@ -16,6 +16,7 @@ import {
   RowList,
   StatusBadge,
 } from "@/components/dashboard/ui";
+import { ExportButton } from "@/components/dashboard/export-button";
 import {
   fetchPlantCategories,
   fetchPlantFamilies,
@@ -71,6 +72,20 @@ export default function PlantsPage() {
         description="Tracked plants, manual health state and checklist load."
       >
         <div className="flex flex-wrap gap-2">
+          <ExportButton
+            jsonFilename="plants.json"
+            csvFilename="plants.csv"
+            data={plants.data ?? []}
+            csvRows={(plants.data ?? []).map((plant) => ({
+              id: plant.id,
+              name: plant.name,
+              zoneId: plant.zoneId ?? "",
+              status: plant.status,
+              currentHealthStatus: plant.currentHealthStatus,
+              plantedAt: plant.plantedAt,
+              acquiredAt: plant.acquiredAt ?? "",
+            }))}
+          />
           <Button
             variant="outline"
             size="sm"

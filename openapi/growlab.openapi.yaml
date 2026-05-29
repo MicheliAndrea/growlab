@@ -598,6 +598,48 @@ paths:
                 $ref: "#/components/schemas/DeviceProvisioningConfig"
         "404":
           $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Devices]
+      operationId: createDeviceProvisioning
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeviceProvisioningCreateRequest"
+      responses:
+        "201":
+          description: Device provisioning metadata created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceProvisioningConfig"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/provisioning/claim:
+    post:
+      tags: [Devices]
+      operationId: claimDeviceProvisioning
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeviceProvisioningClaimRequest"
+      responses:
+        "200":
+          description: Device provisioning claimed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceProvisioningConfig"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/sensors/{id}/calibrations:
     get:
@@ -1686,12 +1728,37 @@ components:
           nullable: true
         metadata:
           $ref: "#/components/schemas/JsonObject"
+        claimToken:
+          type: string
+          nullable: true
+        claimUrl:
+          type: string
+          nullable: true
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
+
+    DeviceProvisioningCreateRequest:
+      type: object
+      properties:
+        provisioningConfig:
+          $ref: "#/components/schemas/JsonObject"
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        metadata:
+          $ref: "#/components/schemas/JsonObject"
+
+    DeviceProvisioningClaimRequest:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
 
     SensorCalibration:
       type: object

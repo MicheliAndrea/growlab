@@ -2,7 +2,7 @@
 
 ## Obiettivo
 
-Preparare Docker Compose per `app-01`.
+Preparare Docker Compose per `app-host`.
 
 ## Servizi
 
@@ -15,7 +15,7 @@ Preparare Docker Compose per `app-01`.
 
 ## PostgreSQL
 
-PostgreSQL/TimescaleDB resta esterno su `pg-01`.
+PostgreSQL/TimescaleDB resta esterno su `db-host`.
 
 ## Volumi
 

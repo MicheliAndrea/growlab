@@ -62,7 +62,7 @@ func main() {
 		serverErrors <- metricsServer.ListenAndServe()
 	}()
 
-	messageProcessor := processor.New(store.New(pool))
+	messageProcessor := processor.New(store.New(pool), logger)
 	mqttClient := workermqtt.New(workermqtt.Config{
 		Broker:   cfg.MQTTBroker,
 		ClientID: cfg.MQTTClientID,

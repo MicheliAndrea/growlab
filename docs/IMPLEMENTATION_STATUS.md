@@ -20,9 +20,9 @@ make --no-print-directory dev dev-web dev-api dev-worker build test lint docker-
 
 Completato.
 
-- Aggiunto `infrastructure/docker/docker-compose.yml` per `app-01`.
+- Aggiunto `infrastructure/docker/docker-compose.yml` per `app-host`.
 - Definiti i servizi `growlab-web`, `growlab-api`, `growlab-worker`, `growlab-emqx`, `growlab-redis`, `growlab-ollama`.
-- PostgreSQL/TimescaleDB resta esterno su `pg-01`.
+- PostgreSQL/TimescaleDB resta esterno su `db-host`.
 - Definiti i volumi Docker richiesti.
 - Redis e Ollama non espongono porte host.
 - Ollama e presente con profilo Compose `ai`, quindi non parte nel profilo predefinito.
@@ -65,7 +65,7 @@ rg -n "jsonb" database/migrations/000001_init_schema.sql
 
 Note:
 
-- Le migrazioni reali richiedono il PostgreSQL/TimescaleDB esterno su `pg-01`.
+- Le migrazioni reali richiedono il PostgreSQL/TimescaleDB esterno su `db-host`.
 
 ## STEP 03B - Database Feature Enhancements
 
@@ -84,7 +84,7 @@ Completato.
 Feature lasciate solo documentate:
 
 - rules engine completo;
-- digital twin/layout visuale zone;
+- digital twin geometrico completo e layout visuale zone persistente;
 - kiosk mode UI;
 - dashboard Grafana complete;
 - QR provisioning completo;
@@ -105,7 +105,7 @@ go build ./...
 
 Note:
 
-- Se `goose` e installato, `make migrate-up` applica le migrazioni al PostgreSQL/TimescaleDB esterno su `pg-01`.
+- Se `goose` e installato, `make migrate-up` applica le migrazioni al PostgreSQL/TimescaleDB esterno su `db-host`.
 - Il Makefile rileva anche binari installati con `go install` in `$HOME/go/bin`.
 
 ## STEP 04 - OpenAPI Contract
@@ -192,7 +192,7 @@ Completato.
 - Registrate le rotte domain in `apps/api/internal/http/router.go`.
 - Coperti i moduli principali: zone, zone profiles, piante, plant timeline, Plant Wiki, immagini metadata, plant tasks, system events, system alerts, device capabilities, provisioning metadata, sensor calibrations, lighting systems/profiles, firmware metadata, OTA metadata e irrigation disabled.
 - Allineato OpenAPI con le rotte Plant Wiki e con `growAreaId` obbligatorio per le zone, coerente con il vincolo DB.
-- Il provisioning device non espone `token_hash` nelle risposte API.
+- Il provisioning device espone create/claim flow, con token mostrato solo in risposta di creazione e mai persistito in chiaro.
 - Il modulo irrigazione continua a non avviare nulla: `POST /api/irrigation/{id}/manual-run` ritorna `IRRIGATION_DISABLED`.
 
 Verifiche leggere eseguite:
@@ -344,7 +344,145 @@ Completato.
 - Aggiunti form create/edit per zone e piante.
 - Aggiunto dettaglio zona con target profiles e piante assegnate.
 - Aggiunto dettaglio pianta con timeline, eventi manuali, checklist e form evento.
+- Aggiunto anche il form manuale per creare task di checklist direttamente dal dettaglio pianta.
 - Aggiunta sezione Plant Wiki base nella lista piante.
+
+## STEP 03B - Zone Profiles UI
+
+Implementato il create flow minimale per i target profiles di zona.
+
+- Aggiunto `createZoneProfileEntry` nei query helpers.
+- Aggiunto il form `ZoneProfileForm` nel dettaglio zona.
+- Il dettaglio zona ora permette di creare un target profile con `name`, `isActive`, `targetConfig` e `metadata`.
+- Le liste restano lette dal backend e si aggiornano dopo la creazione.
+
+Verifiche leggere eseguite:
+
+```bash
+pnpm exec prettier --write apps/web/components/zones/zone-detail.tsx apps/web/components/zones/zone-profile-form.tsx apps/web/lib/queries.ts docs/IMPLEMENTATION_STATUS.md
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+git diff --check
+```
+
+## STEP 03B - Zone Layout Preview
+
+Aggiunta una preview persistente del layout zona nel dettaglio zona.
+
+- Aggiunti `ZoneLayoutPreview` e `ZoneLayoutEditor` sotto `apps/web/components/zones/`.
+- Il layout può essere salvato in `zone.metadata.layout` e poi riutilizzato dalla preview.
+- La preview combina piante assegnate e layout persistente, con fallback sintetico se il layout non esiste.
+- Il pannello mostra anche un riepilogo dei target leggibili dal JSON del profilo attivo.
+- Questo è un editor 2D a griglia con drag/drop e dimensioni rows/columns; non usa ancora coordinate libere o una canvas geometrica completa.
+
+Verifiche leggere eseguite:
+
+```bash
+pnpm exec prettier --write apps/web/components/zones/zone-detail.tsx apps/web/components/zones/zone-layout-preview.tsx apps/web/components/zones/zone-layout-editor.tsx docs/IMPLEMENTATION_STATUS.md
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+git diff --check
+```
+
+## STEP 03B - System Operations UI
+
+Implementata una pagina operativa dedicata per eventi e alert di sistema.
+
+- Aggiunto `createSystemAlertEntry`, `createSystemEventEntry`, `acknowledgeSystemAlertEntry` e `resolveSystemAlertEntry` nei query helpers.
+- Aggiunta la pagina `/operations`.
+- La pagina permette di creare alert manuali, creare eventi manuali, vedere gli alert attivi e gestirli con acknowledge/resolve.
+- La pagina mostra anche gli eventi recenti in stream separato dal dashboard principale.
+
+Verifiche leggere eseguite:
+
+```bash
+pnpm exec prettier --write apps/web/components/operations/operations-console.tsx apps/web/app/operations/page.tsx apps/web/components/layout/app-shell.tsx apps/web/lib/queries.ts docs/IMPLEMENTATION_STATUS.md
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+git diff --check
+```
+
+## STEP 03B - Lighting Profiles UI
+
+Implementato il create flow minimale per i lighting profiles.
+
+- Aggiunto `createLightingProfileEntry` nei query helpers.
+- Aggiunto il form `LightingProfileForm` nella pagina `Lighting`.
+- La pagina permette di scegliere zona, sistema luce opzionale, timezone e step JSON.
+- La lista profili mostra anche il flag `default` oltre allo stato `enabled`.
+
+Verifiche leggere eseguite:
+
+```bash
+pnpm exec prettier --write apps/web/app/lighting/page.tsx apps/web/components/lighting/lighting-profile-form.tsx apps/web/lib/queries.ts docs/IMPLEMENTATION_STATUS.md
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+git diff --check
+```
+
+## STEP 23 - Kiosk Mode
+
+Implementata una pagina read-only dedicata al display sempre aperto.
+
+- Aggiunta la route `/kiosk`.
+- Aggiunto `Kiosk` alla navigazione principale.
+- La pagina mostra ora/data, stato API, zone, piante, device online/offline, alert attivi, ultimi eventi e ultime immagini.
+- Nessuna azione pericolosa esposta nella vista kiosk.
+
+Verifiche leggere eseguite:
+
+```bash
+pnpm exec prettier --write apps/web/components/kiosk/kiosk-view.tsx apps/web/app/kiosk/page.tsx apps/web/components/layout/app-shell.tsx docs/IMPLEMENTATION_STATUS.md
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+git diff --check
+```
+
+## STEP 10 / STEP 03B - Plant Photo Timeline
+
+Implementata una timeline fotografica leggibile sopra i metadata immagine già esistenti.
+
+- Aggiunto `PlantPhotoTimeline`.
+- La timeline è visibile nel dettaglio pianta e nella pagina immagini.
+- Le immagini sono ordinate per data di acquisizione/upload.
+- Sono esposti growth stage, tag e indicazione di growth tracking quando presente.
+
+Verifiche leggere eseguite:
+
+```bash
+pnpm exec prettier --write apps/web/components/images/plant-photo-timeline.tsx apps/web/components/plants/plant-detail.tsx apps/web/app/images/page.tsx docs/IMPLEMENTATION_STATUS.md
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+git diff --check
+```
+
+## STEP 25 - Device Provisioning
+
+Implementato il create/claim flow minimo per il provisioning dei device.
+
+- Aggiunto `DeviceProvisioningPanel` nella pagina `Devices`.
+- La vista permette di selezionare o cercare un device, generare un provisioning token, copiare il claim URL, visualizzare il QR code e marcare una richiesta come claimed.
+- Il token non viene salvato in chiaro nel database: resta solo l'hash, mentre il token viene restituito una sola volta in risposta alla creazione.
+- La UI continua a mostrare provisioning status, expiry, claimed-at, config JSON e metadata.
+
+Verifiche leggere eseguite:
+
+```bash
+pnpm exec prettier --write apps/web/components/devices/device-provisioning-panel.tsx apps/web/app/devices/page.tsx apps/web/lib/queries.ts docs/IMPLEMENTATION_STATUS.md
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+git diff --check
+```
+
+## STEP 03B - Device Detail UI
+
+Implementata una pagina dettaglio device per capacità e snapshot runtime.
+
+- Aggiunta la route `/devices/{id}`.
+- Aggiunto il link `Open` nella fleet list.
+- La pagina mostra proprietà device, config grezza, capabilities e provisioning snapshot.
+- Il capability model diventa leggibile in un punto unico, senza assumere un claim flow non esposto dal backend.
+
+Verifiche leggere eseguite:
+
+```bash
+pnpm exec prettier --write apps/web/components/devices/device-detail.tsx apps/web/app/devices/[id]/page.tsx apps/web/app/devices/page.tsx apps/web/lib/queries.ts docs/IMPLEMENTATION_STATUS.md
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+git diff --check
+```
 
 Verifiche leggere eseguite:
 
@@ -471,7 +609,7 @@ Completato.
 - Nessun publish MQTT automatico e nessun update firmware automatico.
 - Il worker continua a gestire lo stato OTA da `growlab/devices/+/ota/status`.
 - Aggiornato OpenAPI e rigenerato client Orval.
-- Aggiornata pagina `/firmware` con form upload, download artefatto, dry-run manuale, creazione job e lista status OTA.
+- Aggiornata pagina `/firmware` con form upload, download artefatto, dry-run manuale con metadata, report compatibilita leggibile, creazione job e lista status OTA.
 - Aggiornati `.env.example` e Docker Compose con `GROWLAB_FIRMWARE_UPLOAD_MAX_BYTES`.
 
 Verifiche leggere eseguite:
@@ -592,7 +730,7 @@ Completato e rifinito come integrazione esterna.
 
 - Il monitoring generico homelab e stato spostato fuori dal repository GrowLab.
 - Creata repo dedicata:
-  - `/home/andrea/projects/homelab-monitoring`
+  - `homelab-monitoring`
 - La repo homelab monitoring contiene:
   - Docker Compose monitoring;
   - Grafana;
@@ -618,7 +756,7 @@ Completato e rifinito come integrazione esterna.
 Verifiche leggere eseguite:
 
 ```bash
-cd /home/andrea/projects/homelab-monitoring
+cd homelab-monitoring
 docker compose --env-file .env.example -f docker-compose.yml config
 docker compose --env-file .env.example -f docker-compose.yml --profile redis-exporter --profile container-metrics config
 pnpm exec prettier --write docs/STEP_16_MONITORING_OBSERVABILITY.md docs/MONITORING_INTEGRATION.md docs/IMPLEMENTATION_STATUS.md docs/STEP_19_FINAL_AUDIT.md
@@ -686,6 +824,108 @@ Note:
 - Per scelta operativa non vengono eseguiti `go build ./...`, `go test ./...`, `pnpm build`, `make build` o build globali.
 - Il dev server Next.js non e stato riavviato.
 
+## STEP 22 - Sensor Calibration
+
+Implementato in forma manuale nel frontend.
+
+- Aggiunta la query client `fetchSensorCalibrations`.
+- Aggiunto il mutator client `createSensorCalibrationEntry`.
+- Aggiunta la sezione `Sensor calibration` nella pagina `Devices`.
+- La pagina permette di caricare un sensor ID, creare una calibrazione manuale e visualizzare le calibrazioni recenti.
+- La procedura guidata completa resta documentata come evoluzione futura.
+
+Verifiche leggere eseguite:
+
+```bash
+pnpm exec prettier --write apps/web/components/devices/sensor-calibration-panel.tsx apps/web/app/devices/page.tsx apps/web/lib/queries.ts docs/STEP_22_SENSOR_CALIBRATION.md docs/IMPLEMENTATION_STATUS.md
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+make security-check
+git diff --check
+```
+
+## STEP 22 - Sensor Calibration Wizard
+
+Aggiunta una procedura guidata minima dentro il pannello calibrazioni.
+
+- Inserite letture `dry`, `wet` e `current`.
+- Il pulsante di wizard compone un payload `dry-wet-linear`.
+- Il form manuale resta disponibile come fallback.
+
+Verifiche leggere eseguite:
+
+```bash
+pnpm exec prettier --write apps/web/components/devices/sensor-calibration-panel.tsx docs/IMPLEMENTATION_STATUS.md
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+git diff --check
+```
+
+## STEP 12 / STEP 24 - Lighting Simulation
+
+Aggiunta una preview visuale 24h alle lighting profile.
+
+- La form `LightingProfileForm` mostra una simulazione delle 24 ore.
+- Le barre sono calcolate dagli step JSON salvati.
+- La lettura serve da check rapido prima del salvataggio.
+
+Verifiche leggere eseguite:
+
+```bash
+pnpm exec prettier --write apps/web/components/lighting/lighting-profile-form.tsx docs/IMPLEMENTATION_STATUS.md
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+git diff --check
+```
+
+## STEP 20 - Export and Plant Passport
+
+Implementati export JSON/CSV e passport pianta lato frontend.
+
+- Aggiunto un helper di export client-side riutilizzabile.
+- Aggiunti export JSON/CSV su plants, zones, devices, images e firmware.
+- Aggiunto export `plant passport` dal dettaglio pianta.
+- Gli export sono read-only e non richiedono nuovi endpoint.
+
+Verifiche leggere eseguite:
+
+```bash
+pnpm exec prettier --write apps/web/lib/export.ts apps/web/components/dashboard/export-button.tsx apps/web/app/plants/page.tsx apps/web/app/zones/page.tsx apps/web/app/devices/page.tsx apps/web/app/images/page.tsx apps/web/app/firmware/page.tsx apps/web/components/plants/plant-detail.tsx docs/IMPLEMENTATION_STATUS.md
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+git diff --check
+```
+
+## STEP 25 - Device Provisioning
+
+Implementato il create/claim flow minimo per il provisioning dei device.
+
+- Aggiunto `DeviceProvisioningPanel` nella pagina `Devices`.
+- La vista permette di selezionare o cercare un device, generare un provisioning token, copiare il claim URL, visualizzare il QR code e marcare una richiesta come claimed.
+- Il token non viene salvato in chiaro nel database: resta solo l'hash, mentre il token viene restituito una sola volta in risposta alla creazione.
+- La UI continua a mostrare provisioning status, expiry, claimed-at, config JSON e metadata.
+
+Verifiche leggere eseguite:
+
+```bash
+pnpm exec prettier --write apps/web/components/devices/device-provisioning-panel.tsx apps/web/app/devices/page.tsx apps/web/lib/queries.ts docs/IMPLEMENTATION_STATUS.md
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+git diff --check
+```
+
+## STEP 03B - Device Detail UI
+
+Implementata una pagina dettaglio device per capacità e snapshot runtime.
+
+- Aggiunta la route `/devices/{id}`.
+- Aggiunto il link `Open` nella fleet list.
+- La pagina mostra proprietà device, config grezza, capabilities e provisioning snapshot.
+- Il capability model diventa leggibile in un punto unico, senza assumere un claim flow non esposto dal backend.
+
+Verifiche leggere eseguite:
+
+```bash
+pnpm exec prettier --write apps/web/components/devices/device-detail.tsx apps/web/app/devices/[id]/page.tsx apps/web/app/devices/page.tsx apps/web/lib/queries.ts docs/IMPLEMENTATION_STATUS.md
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+git diff --check
+```
+
 ## STEP 18 - AI Future Module
 
 Completato come guardrail e documentazione futura.
@@ -727,7 +967,7 @@ Completato con verifiche leggere.
 - Il final audit ora include anche i guardrail STEP 18.
 - I next step separano deploy GrowLab, monitoring homelab esterno e future feature non operative.
 - Eseguiti generator/check leggeri senza build pesanti.
-- `make migrate-up` non e stato eseguito per non applicare modifiche al database esterno `pg-01`.
+- `make migrate-up` non e stato eseguito per non applicare modifiche al database esterno `db-host`.
 
 Verifiche leggere eseguite:
 
@@ -751,3 +991,22 @@ Note:
 - Non sono stati avviati container.
 - Per scelta operativa non vengono eseguiti `go build ./...`, `go test ./...`, `pnpm build`, `make build` o build globali.
 - Il dev server Next.js non e stato riavviato.
+
+## STEP 22 - Sensor Calibration
+
+Implementato in forma manuale nel frontend.
+
+- Aggiunta la query client `fetchSensorCalibrations`.
+- Aggiunto il mutator client `createSensorCalibrationEntry`.
+- Aggiunta la sezione `Sensor calibration` nella pagina `Devices`.
+- La pagina permette di caricare un sensor ID, creare una calibrazione manuale e visualizzare le calibrazioni recenti.
+- La procedura guidata completa resta documentata come evoluzione futura.
+
+Verifiche leggere eseguite:
+
+```bash
+pnpm exec prettier --write apps/web/components/devices/sensor-calibration-panel.tsx apps/web/app/devices/page.tsx apps/web/lib/queries.ts docs/STEP_22_SENSOR_CALIBRATION.md docs/IMPLEMENTATION_STATUS.md
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+make security-check
+git diff --check
+```

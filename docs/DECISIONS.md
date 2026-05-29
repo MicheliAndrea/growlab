@@ -13,11 +13,11 @@
 | API                      | REST + OpenAPI                                               |
 | Generated client         | Orval                                                        |
 | Frontend package manager | pnpm                                                         |
-| Database                 | PostgreSQL + TimescaleDB su pg-01                            |
+| Database                 | PostgreSQL + TimescaleDB su db-host                          |
 | DB access                | pgx + sqlc                                                   |
 | Migrazioni               | goose                                                        |
-| Deploy app               | app-01 Docker Compose                                        |
-| Monitoring               | Repo homelab separata su mon-01                              |
+| Deploy app               | app-host Docker Compose                                      |
+| Monitoring               | Repo homelab separata su monitoring-host                     |
 | Logs                     | Loki + Grafana Alloy                                         |
 | Metrics                  | Prometheus + Grafana                                         |
 | VM monitoring            | No nel primo setup                                           |

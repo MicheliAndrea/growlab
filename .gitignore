@@ -5,7 +5,7 @@
 !infrastructure/.env.example
 !infrastructure/docker/.env.example
 !infrastructure/docker/.env.local-app.example
-!infrastructure/docker/.env.app-01-infra.example
+!infrastructure/docker/.env.app-host-infra.example
 
 # Node
 node_modules/

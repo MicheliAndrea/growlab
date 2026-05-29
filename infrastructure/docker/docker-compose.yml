@@ -28,7 +28,7 @@ services:
       GROWLAB_API_ADDR: ${GROWLAB_API_ADDR:-:8080}
       GROWLAB_PUBLIC_API_URL: ${GROWLAB_PUBLIC_API_URL:-http://localhost:8080}
       GROWLAB_CORS_ORIGINS: ${GROWLAB_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
-      GROWLAB_DB_HOST: ${GROWLAB_DB_HOST:-pg-01}
+      GROWLAB_DB_HOST: ${GROWLAB_DB_HOST:-db-host}
       GROWLAB_DB_PORT: ${GROWLAB_DB_PORT:-5432}
       GROWLAB_DB_NAME: ${GROWLAB_DB_NAME:-growlab}
       GROWLAB_DB_USER: ${GROWLAB_DB_USER:-growlab}
@@ -65,7 +65,7 @@ services:
     container_name: growlab-worker
     environment:
       GROWLAB_WORKER_METRICS_ADDR: ${GROWLAB_WORKER_METRICS_ADDR:-:9091}
-      GROWLAB_DB_HOST: ${GROWLAB_DB_HOST:-pg-01}
+      GROWLAB_DB_HOST: ${GROWLAB_DB_HOST:-db-host}
       GROWLAB_DB_PORT: ${GROWLAB_DB_PORT:-5432}
       GROWLAB_DB_NAME: ${GROWLAB_DB_NAME:-growlab}
       GROWLAB_DB_USER: ${GROWLAB_DB_USER:-growlab}

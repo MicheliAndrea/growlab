@@ -1,11 +1,22 @@
 import {
+  acknowledgeSystemAlert,
+  claimDeviceProvisioning,
+  createDeviceProvisioning,
   createFirmwareVersion,
+  createLightingProfile,
+  createPlantTask,
+  createSystemAlert,
+  createSystemEvent,
+  createZoneProfile,
+  createSensorCalibration,
   createOtaDryRun,
   createOtaJob,
+  resolveSystemAlert,
   getDeviceProvisioning,
   getHealth,
   getIrrigationSafety,
   getLightingState,
+  getDevice,
   getPlant,
   getPlantTimeline,
   getZone,
@@ -25,6 +36,7 @@ import {
   listPlantSpecies,
   listPlants,
   listPlantTasks,
+  listSensorCalibrations,
   listSystemAlerts,
   listSystemEvents,
   listZones,
@@ -32,6 +44,8 @@ import {
   type Device,
   type DeviceCapability,
   type DeviceProvisioningConfig,
+  type DeviceProvisioningClaimRequest,
+  type DeviceProvisioningCreateRequest,
   type FirmwareChannel,
   type FirmwareUploadRequest,
   type FirmwareVersion,
@@ -40,6 +54,7 @@ import {
   type IrrigationSystem,
   type LightingEvent,
   type LightingProfile,
+  type LightingProfileCreateRequest,
   type LightingState,
   type LightingSystem,
   type OtaDryRun,
@@ -54,8 +69,13 @@ import {
   type PlantSpecies,
   type PlantTask,
   type PlantTimelineItem,
+  type SensorCalibration,
+  type SensorCalibrationCreateRequest,
+  type SystemAlertCreateRequest,
+  type SystemAlertTransitionRequest,
   type SystemAlert,
   type SystemAlertStatus,
+  type SystemEventCreateRequest,
   type SystemEvent,
   type Zone,
   type ZoneProfile,
@@ -93,10 +113,13 @@ export const queryKeys = {
   plantCategories: ["plant-wiki", "categories"] as const,
   plantSpecies: ["plant-wiki", "species"] as const,
   devices: ["devices"] as const,
+  device: (deviceId: string) => ["devices", deviceId] as const,
   deviceCapabilities: (deviceId: string) =>
     ["devices", deviceId, "capabilities"] as const,
   deviceProvisioning: (deviceId: string) =>
     ["devices", deviceId, "provisioning"] as const,
+  sensorCalibrations: (sensorId: string) =>
+    ["sensors", sensorId, "calibrations"] as const,
   systemAlerts: (status?: SystemAlertStatus) =>
     ["system-alerts", status ?? "all"] as const,
   systemEvents: ["system-events"] as const,
@@ -138,6 +161,17 @@ export async function fetchZoneProfiles(
   return expectData(await listZoneProfiles(zoneId));
 }
 
+export async function createZoneProfileEntry(
+  zoneId: string,
+  request: Parameters<typeof createZoneProfile>[1],
+): Promise<ZoneProfile> {
+  const response = await createZoneProfile(zoneId, request);
+  if (response.status !== 201) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+  return response.data;
+}
+
 export async function fetchPlants(): Promise<Plant[]> {
   return expectData(await listPlants());
 }
@@ -168,6 +202,17 @@ export async function fetchPlantTasks(plantId: string): Promise<PlantTask[]> {
   return expectData(await listPlantTasks(plantId));
 }
 
+export async function createPlantTaskEntry(
+  plantId: string,
+  request: Parameters<typeof createPlantTask>[1],
+): Promise<PlantTask> {
+  const response = await createPlantTask(plantId, request);
+  if (response.status !== 201) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+  return response.data;
+}
+
 export async function fetchPlantTimeline(
   plantId: string,
 ): Promise<PlantTimelineItem[]> {
@@ -176,6 +221,16 @@ export async function fetchPlantTimeline(
 
 export async function fetchDevices(): Promise<Device[]> {
   return expectData(await listDevices());
+}
+
+export async function fetchDevice(id: string): Promise<Device> {
+  const response = await getDevice(id);
+
+  if (response.status !== 200) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+
+  return response.data;
 }
 
 export async function fetchDeviceCapabilities(
@@ -196,6 +251,35 @@ export async function fetchDeviceProvisioning(
   return response.data;
 }
 
+export async function createDeviceProvisioningEntry(
+  deviceId: string,
+  request?: DeviceProvisioningCreateRequest,
+): Promise<DeviceProvisioningConfig> {
+  const response = await createDeviceProvisioning(deviceId, request);
+  if (response.status !== 201) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+
+  return response.data;
+}
+
+export async function claimDeviceProvisioningEntry(
+  request: DeviceProvisioningClaimRequest,
+): Promise<DeviceProvisioningConfig> {
+  const response = await claimDeviceProvisioning(request);
+  if (response.status !== 200) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+
+  return response.data;
+}
+
+export async function fetchSensorCalibrations(
+  sensorId: string,
+): Promise<SensorCalibration[]> {
+  return expectData(await listSensorCalibrations(sensorId));
+}
+
 export async function fetchSystemAlerts(
   status?: SystemAlertStatus,
 ): Promise<SystemAlert[]> {
@@ -204,6 +288,48 @@ export async function fetchSystemAlerts(
 
 export async function fetchSystemEvents(): Promise<SystemEvent[]> {
   return expectData(await listSystemEvents());
+}
+
+export async function createSystemEventEntry(
+  request: SystemEventCreateRequest,
+): Promise<SystemEvent> {
+  const response = await createSystemEvent(request);
+  if (response.status !== 201) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+  return response.data;
+}
+
+export async function createSystemAlertEntry(
+  request: SystemAlertCreateRequest,
+): Promise<SystemAlert> {
+  const response = await createSystemAlert(request);
+  if (response.status !== 201) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+  return response.data;
+}
+
+export async function acknowledgeSystemAlertEntry(
+  id: string,
+  request?: SystemAlertTransitionRequest,
+): Promise<SystemAlert> {
+  const response = await acknowledgeSystemAlert(id, request);
+  if (response.status !== 200) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+  return response.data;
+}
+
+export async function resolveSystemAlertEntry(
+  id: string,
+  request?: SystemAlertTransitionRequest,
+): Promise<SystemAlert> {
+  const response = await resolveSystemAlert(id, request);
+  if (response.status !== 200) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+  return response.data;
 }
 
 export async function fetchLightingSystems(): Promise<LightingSystem[]> {
@@ -232,6 +358,16 @@ export async function fetchLightingProfiles(
   return expectData(
     await listLightingProfiles(zoneId ? { zoneId } : undefined),
   );
+}
+
+export async function createLightingProfileEntry(
+  request: LightingProfileCreateRequest,
+): Promise<LightingProfile> {
+  const response = await createLightingProfile(request);
+  if (response.status !== 201) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+  return response.data;
 }
 
 export async function fetchFirmwareVersions(): Promise<FirmwareVersion[]> {
@@ -281,6 +417,17 @@ export async function createDeviceOtaDryRun(
 ): Promise<OtaDryRun> {
   const response = await createOtaDryRun(deviceId, request);
   if (response.status !== 200) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+  return response.data;
+}
+
+export async function createSensorCalibrationEntry(
+  sensorId: string,
+  request: SensorCalibrationCreateRequest,
+): Promise<SensorCalibration> {
+  const response = await createSensorCalibration(sensorId, request);
+  if (response.status !== 201) {
     throw new Error(`API request failed with status ${response.status}`);
   }
   return response.data;

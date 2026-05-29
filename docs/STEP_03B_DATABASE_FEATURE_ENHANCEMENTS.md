@@ -38,7 +38,7 @@ Questo step estende STEP 03 con una migrazione incrementale goose. La migrazione
 ## Feature lasciate solo documentate
 
 - Rules engine completo.
-- Digital twin e layout visuale zone.
+- Digital twin geometrico completo e layout visuale zone persistente.
 - Kiosk mode UI.
 - Dashboard Grafana complete.
 - QR provisioning completo.
@@ -102,4 +102,4 @@ go test ./...
 go build ./...
 ```
 
-In ambiente locale `make migrate-up` richiede PostgreSQL/TimescaleDB esterno raggiungibile su `pg-01`.
+In ambiente locale `make migrate-up` richiede PostgreSQL/TimescaleDB esterno raggiungibile su `db-host`.

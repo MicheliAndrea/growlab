@@ -18,7 +18,7 @@ SQLC_CONFIG ?= sqlc.yaml
 MIGRATIONS_DIR ?= database/migrations
 OPENAPI_SPEC ?= openapi/growlab.openapi.yaml
 
-GROWLAB_DB_HOST ?= pg-01
+GROWLAB_DB_HOST ?= db-host
 GROWLAB_DB_PORT ?= 5432
 GROWLAB_DB_NAME ?= growlab
 GROWLAB_DB_USER ?= growlab

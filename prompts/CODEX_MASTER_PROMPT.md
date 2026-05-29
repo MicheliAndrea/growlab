@@ -11,15 +11,15 @@ Devi creare GrowLab usando documentazione step-by-step.
 - API: REST + OpenAPI
 - TS client: Orval
 - Package manager frontend: pnpm
-- DB: PostgreSQL + TimescaleDB esterno su pg-01
+- DB: PostgreSQL + TimescaleDB esterno su db-host
 - DB access: pgx + sqlc
 - Migrazioni: goose
 - MQTT: EMQX
 - Cache: Redis
 - Lighting: Shelly Dimmer 2 local HTTP API
 - Firmware: ESP32 PlatformIO + Arduino
-- Deploy: Docker Compose su app-01
-- Monitoring: mon-01 con Grafana, Prometheus, Loki, Alloy
+- Deploy: Docker Compose su app-host
+- Monitoring: monitoring-host con Grafana, Prometheus, Loki, Alloy
 
 ## Regole
 

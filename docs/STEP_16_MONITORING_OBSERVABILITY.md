@@ -11,14 +11,14 @@ Il monitoring non vive dentro questo repository.
 GrowLab espone metriche, log containerizzabili e dati applicativi interrogabili; lo stack Grafana/Prometheus/Loki/Alloy vive in una repository separata:
 
 ```text
-/home/andrea/projects/homelab-monitoring
+homelab-monitoring
 ```
 
 Questa scelta rende il monitoring generico per tutto l'homelab, non accoppiato al ciclo di sviluppo GrowLab.
 
 ## VM dedicata
 
-`mon-01`
+`monitoring-host`
 
 ## Stack nella repo monitoring
 
@@ -51,9 +51,9 @@ La repo `homelab-monitoring` resta responsabile di:
 
 ## Target Prometheus previsti
 
-- `growlab-api` su `app-01:8080/metrics`
-- `growlab-worker` su `app-01:9091/metrics`
-- `prometheus` locale su `mon-01`
+- `growlab-api` su `app-host:8080/metrics`
+- `growlab-worker` su `app-host:9091/metrics`
+- `prometheus` locale su `monitoring-host`
 - target opzionali per EMQX, Redis exporter e cAdvisor
 
 ## Cosa NON monitorare ora
@@ -81,7 +81,7 @@ Non esistono piu file applicativi in `infrastructure/monitoring`.
 La validazione dello stack monitoring va eseguita nella repo dedicata:
 
 ```bash
-cd /home/andrea/projects/homelab-monitoring
+cd homelab-monitoring
 docker compose --env-file .env.example -f docker-compose.yml config
 ```
 

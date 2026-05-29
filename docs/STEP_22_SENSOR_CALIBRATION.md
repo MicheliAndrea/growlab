@@ -2,7 +2,7 @@
 
 ## Stato
 
-Feature V2.
+Feature V2, con una prima superficie operativa manuale gia disponibile.
 
 ## Obiettivo
 
@@ -84,3 +84,13 @@ Funzioni:
 - Mantenere raw value nei metadata.
 - Mostrare sempre ultimo valore raw per debug.
 - Permettere reset calibrazione.
+
+## Stato attuale
+
+E gia disponibile una sezione manuale di calibrazione nella pagina `Devices`:
+
+- selezione sensor ID;
+- creazione calibrazione manuale;
+- salvataggio `draft` / `confirmed`;
+- lista calibrazioni recenti;
+- metadata raw e payload JSON.

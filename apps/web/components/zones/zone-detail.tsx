@@ -15,6 +15,9 @@ import {
   RowList,
   StatusBadge,
 } from "@/components/dashboard/ui";
+import { ZoneProfileForm } from "@/components/zones/zone-profile-form";
+import { ZoneLayoutEditor } from "@/components/zones/zone-layout-editor";
+import { ZoneLayoutPreview } from "@/components/zones/zone-layout-preview";
 import {
   fetchPlantsByZone,
   fetchZone,
@@ -112,30 +115,73 @@ export function ZoneDetail({ zoneId }: { zoneId: string }) {
         </section>
       ) : null}
 
+      {zone.data ? (
+        <ZoneLayoutPreview
+          zoneName={zone.data.name}
+          plants={plants.data ?? []}
+          profiles={profiles.data ?? []}
+          layout={
+            zone.data.metadata && typeof zone.data.metadata === "object"
+              ? ((zone.data.metadata as Record<string, unknown>).layout as
+                  | {
+                      version?: number;
+                      rows?: number;
+                      columns?: number;
+                      slots?: Array<{
+                        id?: string;
+                        label?: string;
+                        plantId?: string | null;
+                        plantName?: string | null;
+                        plantCode?: string | null;
+                        note?: string | null;
+                      }>;
+                    }
+                  | undefined)
+              : undefined
+          }
+        />
+      ) : null}
+
+      {zone.data ? (
+        <DataPanel
+          title="Layout editor"
+          description="Persist the zone layout in metadata."
+        >
+          <ZoneLayoutEditor zone={zone.data} plants={plants.data ?? []} />
+        </DataPanel>
+      ) : null}
+
       <DataPanel
         title="Target profiles"
         description="Target configuration history."
       >
-        {profiles.isLoading ? <DataNotice state="loading" /> : null}
-        {profiles.isError ? <DataNotice state="error" /> : null}
-        {profiles.data && profiles.data.length > 0 ? (
-          <RowList>
-            {profiles.data.map((profile) => (
-              <Row
-                key={profile.id}
-                title={profile.name}
-                detail={formatDateTime(profile.updatedAt)}
-                meta={
-                  <StatusBadge
-                    value={profile.isActive ? "active" : "inactive"}
-                  />
-                }
-              />
-            ))}
-          </RowList>
-        ) : !profiles.isLoading && !profiles.isError ? (
-          <EmptyState title="No target profiles" />
-        ) : null}
+        <div className="grid gap-4">
+          <ZoneProfileForm zoneId={zoneId} />
+
+          {profiles.isLoading ? <DataNotice state="loading" /> : null}
+          {profiles.isError ? <DataNotice state="error" /> : null}
+          {profiles.data && profiles.data.length > 0 ? (
+            <RowList>
+              {profiles.data.map((profile) => (
+                <Row
+                  key={profile.id}
+                  title={profile.name}
+                  detail={formatDateTime(profile.updatedAt)}
+                  meta={
+                    <StatusBadge
+                      value={profile.isActive ? "active" : "inactive"}
+                    />
+                  }
+                />
+              ))}
+            </RowList>
+          ) : !profiles.isLoading && !profiles.isError ? (
+            <EmptyState
+              title="No target profiles"
+              detail="Add the first target profile above."
+            />
+          ) : null}
+        </div>
       </DataPanel>
     </div>
   );

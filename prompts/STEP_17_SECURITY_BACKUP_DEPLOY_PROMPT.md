@@ -18,8 +18,8 @@ Implementa esclusivamente questo step.
 - No auth MVP.
 - No AI tecnica ora.
 - Irrigazione disabilitata.
-- PostgreSQL esterno su pg-01.
-- Monitoring su mon-01 quando previsto.
+- PostgreSQL esterno su db-host.
+- Monitoring su monitoring-host quando previsto.
 - Non saltare agli step successivi.
 
 Alla fine aggiorna `docs/IMPLEMENTATION_STATUS.md` con cosa hai fatto e quali comandi sono stati verificati.

@@ -2,11 +2,17 @@ package services
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
+	"net/url"
 	"strings"
+	"time"
 
 	"growlab/apps/api/internal/repositories"
 	"growlab/apps/api/internal/shelly"
@@ -265,7 +271,7 @@ GROUP BY plant_images.id`,
 }
 
 func (s *DomainService) CreatePlantImageMetadata(ctx context.Context, plantID string, body map[string]any) (repositories.Record, error) {
-	return s.repo.QueryOne(ctx, `
+	result, err := s.repo.QueryOne(ctx, `
 WITH created AS (
 INSERT INTO plant_images (plant_id, zone_id, storage_path, original_filename, content_type, size_bytes, checksum_sha256, captured_at, growth_stage, growth_tracking, metadata)
 VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8::timestamptz, $9, $10::jsonb, $11::jsonb)
@@ -294,6 +300,37 @@ FROM created`,
 		jsonField(body, "metadata"),
 		jsonArrayField(body, "tags"),
 	)
+	if err != nil {
+		s.emitSystemEvent(ctx, systemEventInput{
+			EventType: "image_upload_failed",
+			Severity:  "warning",
+			Source:    "api",
+			PlantID:   plantID,
+			Message:   fmt.Sprintf("image upload metadata insert failed for plant %s", plantID),
+			Metadata: map[string]any{
+				"plantId": plantID,
+				"error":   err.Error(),
+			},
+		})
+		return result, err
+	}
+	imageID, _ := result["id"].(string)
+	zoneID, _ := result["zoneId"].(string)
+	s.emitSystemEvent(ctx, systemEventInput{
+		EventType: "image_uploaded",
+		Severity:  "info",
+		Source:    "api",
+		PlantID:   plantID,
+		ZoneID:    zoneID,
+		Message:   fmt.Sprintf("plant image %s uploaded for plant %s", imageID, plantID),
+		Metadata: map[string]any{
+			"plantImageId": imageID,
+			"plantId":      plantID,
+			"contentType":  result["contentType"],
+			"sizeBytes":    result["sizeBytes"],
+		},
+	})
+	return result, nil
 }
 
 func (s *DomainService) ListPlantTasks(ctx context.Context, plantID string) ([]repositories.Record, error) {
@@ -316,6 +353,45 @@ RETURNING *`,
 
 func (s *DomainService) ListSystemEvents(ctx context.Context) ([]repositories.Record, error) {
 	return s.repo.Query(ctx, `SELECT * FROM system_events ORDER BY occurred_at DESC LIMIT 100`)
+}
+
+type systemEventInput struct {
+	EventType string
+	Severity  string
+	Source    string
+	DeviceID  string
+	ZoneID    string
+	PlantID   string
+	AlertID   string
+	Message   string
+	Metadata  map[string]any
+}
+
+func (s *DomainService) emitSystemEvent(ctx context.Context, ev systemEventInput) {
+	severity := ev.Severity
+	if severity == "" {
+		severity = "info"
+	}
+	source := ev.Source
+	if source == "" {
+		source = "api"
+	}
+	_, err := s.repo.Exec(ctx, `
+INSERT INTO system_events (event_type, severity, source, zone_id, plant_id, device_id, alert_id, message, metadata)
+VALUES ($1, $2, $3, NULLIF($4, '')::uuid, NULLIF($5, '')::uuid, NULLIF($6, '')::uuid, NULLIF($7, '')::uuid, $8, $9::jsonb)`,
+		ev.EventType,
+		severity,
+		source,
+		ev.ZoneID,
+		ev.PlantID,
+		ev.DeviceID,
+		ev.AlertID,
+		ev.Message,
+		mustJSON(ev.Metadata),
+	)
+	if err != nil {
+		slog.Default().Warn("system event insert failed", "eventType", ev.EventType, "error", err)
+	}
 }
 
 func (s *DomainService) CreateSystemEvent(ctx context.Context, body map[string]any) (repositories.Record, error) {
@@ -397,6 +473,94 @@ LIMIT 1`,
 	)
 }
 
+func (s *DomainService) CreateDeviceProvisioning(ctx context.Context, deviceID string, body map[string]any) (repositories.Record, error) {
+	token, tokenHash, err := generateProvisioningToken()
+	if err != nil {
+		return nil, err
+	}
+
+	record, err := s.repo.QueryOne(ctx, `
+WITH device_record AS (
+  SELECT id
+  FROM devices
+  WHERE id = $1::uuid
+),
+revoked AS (
+  UPDATE device_provisioning_configs
+  SET status = 'revoked',
+      updated_at = now()
+  WHERE device_id = $1::uuid
+    AND status = 'pending'
+  RETURNING 1
+),
+created AS (
+  INSERT INTO device_provisioning_configs (
+    device_id,
+    status,
+    token_hash,
+    provisioning_config,
+    expires_at,
+    metadata
+  )
+  SELECT
+    device_record.id,
+    'pending',
+    $2,
+    COALESCE($3::jsonb, '{}'::jsonb),
+    COALESCE($4::timestamptz, now() + interval '7 days'),
+    COALESCE($5::jsonb, '{}'::jsonb)
+  FROM device_record
+  RETURNING *
+)
+SELECT * FROM created`,
+		deviceID,
+		tokenHash,
+		jsonField(body, "provisioningConfig"),
+		nullableString(body, "expiresAt"),
+		jsonField(body, "metadata"),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	record["claimToken"] = token
+	if claimURL := s.provisioningClaimURL(token); claimURL != "" {
+		record["claimUrl"] = claimURL
+	}
+	return record, nil
+}
+
+func (s *DomainService) ClaimDeviceProvisioning(ctx context.Context, token string) (repositories.Record, error) {
+	tokenHash := hashProvisioningToken(token)
+	record, err := s.repo.QueryOne(ctx, `
+UPDATE device_provisioning_configs
+SET status = 'claimed',
+    claimed_at = COALESCE(claimed_at, now()),
+    updated_at = now()
+WHERE token_hash = $1
+  AND status = 'pending'
+  AND (expires_at IS NULL OR expires_at > now())
+RETURNING *`,
+		tokenHash,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	s.emitSystemEvent(ctx, systemEventInput{
+		EventType: "device_provisioned",
+		Severity:  "info",
+		Source:    "api",
+		DeviceID:  stringValue(record["deviceId"]),
+		Message:   fmt.Sprintf("device provisioning claimed for %s", stringValue(record["deviceId"])),
+		Metadata: map[string]any{
+			"deviceProvisioningConfigId": record["id"],
+		},
+	})
+
+	return record, nil
+}
+
 func (s *DomainService) ListSensorCalibrations(ctx context.Context, sensorID string) ([]repositories.Record, error) {
 	return s.repo.Query(ctx, `SELECT * FROM sensor_calibrations WHERE sensor_id = $1::uuid ORDER BY created_at DESC`, sensorID)
 }
@@ -428,6 +592,18 @@ func (s *DomainService) GetLightingState(ctx context.Context, id string) (reposi
 	state, err := s.shellyState(ctx, system)
 	if err != nil {
 		_ = s.logLightingEvent(ctx, id, "state_failed", nil, "api", map[string]any{"error": err.Error()})
+		s.emitSystemEvent(ctx, systemEventInput{
+			EventType: "shelly_unreachable",
+			Severity:  "warning",
+			Source:    "api",
+			Message:   fmt.Sprintf("shelly state fetch failed for lighting %s", id),
+			Metadata: map[string]any{
+				"lightingSystemId": id,
+				"error":            err.Error(),
+				"endpointUrl":      system["endpointUrl"],
+				"provider":         system["provider"],
+			},
+		})
 		return nil, err
 	}
 	return lightingStateRecord(system, state), nil
@@ -512,6 +688,17 @@ func (s *DomainService) LightingCommand(ctx context.Context, id string, action s
 	endpoint, err := s.shellyEndpoint(system)
 	if err != nil {
 		_ = s.logLightingEvent(ctx, id, action+"_failed", nullableNumber(body, "brightnessPercent"), "api", map[string]any{"error": err.Error()})
+		s.emitSystemEvent(ctx, systemEventInput{
+			EventType: "lighting_command_failed",
+			Severity:  "warning",
+			Source:    "api",
+			Message:   fmt.Sprintf("lighting %s endpoint resolution failed", id),
+			Metadata: map[string]any{
+				"lightingSystemId": id,
+				"action":           action,
+				"error":            err.Error(),
+			},
+		})
 		return nil, err
 	}
 
@@ -528,6 +715,18 @@ func (s *DomainService) LightingCommand(ctx context.Context, id string, action s
 	}
 	if err != nil {
 		_ = s.logLightingEvent(ctx, id, action+"_failed", nullableNumber(body, "brightnessPercent"), "api", map[string]any{"error": err.Error()})
+		s.emitSystemEvent(ctx, systemEventInput{
+			EventType: "shelly_unreachable",
+			Severity:  "warning",
+			Source:    "api",
+			Message:   fmt.Sprintf("shelly command %s failed for lighting %s", action, id),
+			Metadata: map[string]any{
+				"lightingSystemId": id,
+				"action":           action,
+				"endpointUrl":      endpoint,
+				"error":            err.Error(),
+			},
+		})
 		return nil, err
 	}
 
@@ -543,6 +742,18 @@ func (s *DomainService) LightingCommand(ctx context.Context, id string, action s
 	if err := s.logLightingEvent(ctx, id, eventType, state.BrightnessPercent, "api", metadata); err != nil {
 		return nil, err
 	}
+	s.emitSystemEvent(ctx, systemEventInput{
+		EventType: "lighting_command_applied",
+		Severity:  "info",
+		Source:    "api",
+		Message:   fmt.Sprintf("lighting %s applied %s", id, eventType),
+		Metadata: map[string]any{
+			"lightingSystemId":  id,
+			"action":            eventType,
+			"brightnessPercent": state.BrightnessPercent,
+			"isOn":              state.IsOn,
+		},
+	})
 	return repositories.Record{
 		"lightingSystemId":  id,
 		"accepted":          true,
@@ -660,6 +871,27 @@ ORDER BY requested_at DESC`,
 }
 
 func (s *DomainService) CreateOtaJob(ctx context.Context, deviceID string, body map[string]any) (repositories.Record, error) {
+	result, err := s.createOtaJob(ctx, deviceID, body)
+	if err == nil && result != nil {
+		jobID, _ := result["id"].(string)
+		firmwareID, _ := result["firmwareVersionId"].(string)
+		s.emitSystemEvent(ctx, systemEventInput{
+			EventType: "ota_scheduled",
+			Severity:  "info",
+			Source:    "api",
+			DeviceID:  deviceID,
+			Message:   fmt.Sprintf("ota job %s scheduled for device %s", jobID, deviceID),
+			Metadata: map[string]any{
+				"jobId":             jobID,
+				"firmwareVersionId": firmwareID,
+				"dispatchMode":      "manual",
+			},
+		})
+	}
+	return result, err
+}
+
+func (s *DomainService) createOtaJob(ctx context.Context, deviceID string, body map[string]any) (repositories.Record, error) {
 	return s.repo.QueryOne(ctx, `
 WITH device_record AS (
   SELECT id, device_uid, device_type
@@ -718,6 +950,34 @@ SELECT * FROM updated`,
 }
 
 func (s *DomainService) CreateOtaDryRun(ctx context.Context, deviceID string, body map[string]any) (repositories.Record, error) {
+	result, err := s.createOtaDryRun(ctx, deviceID, body)
+	if err == nil && result != nil {
+		status, _ := result["status"].(string)
+		dryRunID, _ := result["id"].(string)
+		firmwareID, _ := result["firmwareVersionId"].(string)
+		severity := "info"
+		eventType := "ota_dry_run_passed"
+		if status == "failed" {
+			severity = "warning"
+			eventType = "ota_dry_run_failed"
+		}
+		s.emitSystemEvent(ctx, systemEventInput{
+			EventType: eventType,
+			Severity:  severity,
+			Source:    "api",
+			DeviceID:  deviceID,
+			Message:   fmt.Sprintf("ota dry-run %s %s for device %s", dryRunID, status, deviceID),
+			Metadata: map[string]any{
+				"dryRunId":          dryRunID,
+				"firmwareVersionId": firmwareID,
+				"status":            status,
+			},
+		})
+	}
+	return result, err
+}
+
+func (s *DomainService) createOtaDryRun(ctx context.Context, deviceID string, body map[string]any) (repositories.Record, error) {
 	return s.repo.QueryOne(ctx, `
 WITH device_record AS (
   SELECT id, device_type, firmware_version
@@ -813,6 +1073,31 @@ func (s *DomainService) ListPlantWiki(ctx context.Context, table string) ([]repo
 	default:
 		return nil, fmt.Errorf("unknown wiki table: %s", table)
 	}
+}
+
+func (s *DomainService) provisioningClaimURL(token string) string {
+	if token == "" {
+		return ""
+	}
+	encoded := url.QueryEscape(token)
+	if s.publicAPIURL != "" {
+		return s.publicAPIURL + "/api/provisioning/claim?token=" + encoded
+	}
+	return "/api/provisioning/claim?token=" + encoded
+}
+
+func generateProvisioningToken() (string, string, error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", "", err
+	}
+	token := base64.RawURLEncoding.EncodeToString(raw)
+	return token, hashProvisioningToken(token), nil
+}
+
+func hashProvisioningToken(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return fmt.Sprintf("%x", sum[:])
 }
 
 const lightingProfileSelect = `
@@ -914,6 +1199,14 @@ func jsonField(body map[string]any, key string) []byte {
 		return []byte("{}")
 	}
 	return mustJSON(value)
+}
+
+func stringValue(value any) string {
+	if value == nil {
+		return ""
+	}
+	text, _ := value.(string)
+	return text
 }
 
 func mustJSON(value any) []byte {

@@ -4,6 +4,7 @@ import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Camera, HardDrive, Image, RefreshCcw, Sprout } from "lucide-react";
 
 import { ImageGallery } from "@/components/images/image-gallery";
+import { PlantPhotoTimeline } from "@/components/images/plant-photo-timeline";
 import { Button } from "@/components/ui/button";
 import {
   DataNotice,
@@ -11,6 +12,7 @@ import {
   MetricCard,
   PageHeader,
 } from "@/components/dashboard/ui";
+import { ExportButton } from "@/components/dashboard/export-button";
 import { fetchPlantImages, fetchPlants, queryKeys } from "@/lib/queries";
 
 const poll = 30_000;
@@ -49,14 +51,32 @@ export default function ImagesPage() {
         title="Plant Gallery"
         description="Uploaded plant images, growth-stage metadata and tags."
       >
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void queryClient.invalidateQueries()}
-        >
-          <RefreshCcw className="h-4 w-4" aria-hidden="true" />
-          Refresh
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <ExportButton
+            jsonFilename="plant-images.json"
+            csvFilename="plant-images.csv"
+            data={images}
+            csvRows={images.map((image) => ({
+              id: image.id,
+              plantId: image.plantId,
+              plantName: image.plantName ?? "",
+              zoneId: image.zoneId ?? "",
+              growthStage: image.growthStage ?? "",
+              capturedAt: image.capturedAt ?? "",
+              uploadedAt: image.uploadedAt,
+              tags: (image.tags ?? []).join(";"),
+              sizeBytes: image.sizeBytes ?? 0,
+            }))}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void queryClient.invalidateQueries()}
+          >
+            <RefreshCcw className="h-4 w-4" aria-hidden="true" />
+            Refresh
+          </Button>
+        </div>
       </PageHeader>
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -95,6 +115,21 @@ export default function ImagesPage() {
         ) : null}
         {!plants.isLoading && !imageQueries.some((query) => query.isLoading) ? (
           <ImageGallery images={images} />
+        ) : null}
+      </DataPanel>
+
+      <DataPanel
+        title="Photo timeline"
+        description="Latest images ordered by capture time."
+      >
+        {plants.isLoading || imageQueries.some((query) => query.isLoading) ? (
+          <DataNotice state="loading" />
+        ) : null}
+        {plants.isError || imageQueries.some((query) => query.isError) ? (
+          <DataNotice state="error" />
+        ) : null}
+        {!plants.isLoading && !imageQueries.some((query) => query.isLoading) ? (
+          <PlantPhotoTimeline images={images} />
         ) : null}
       </DataPanel>
     </div>

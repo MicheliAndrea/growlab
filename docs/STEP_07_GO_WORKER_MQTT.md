@@ -42,7 +42,7 @@ Telemetry:
 {
   "recordedAt": "2026-05-27T10:00:00Z",
   "readings": [
-    {"sensorKey": "air_temperature", "value": 23.4, "unit": "celsius"}
+    { "sensorKey": "air_temperature", "value": 23.4, "unit": "celsius" }
   ],
   "metadata": {}
 }

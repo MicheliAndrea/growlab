@@ -2,7 +2,9 @@ package mqtt
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -10,6 +12,7 @@ import (
 
 	"growlab/workers/growlab-worker/internal/metrics"
 	"growlab/workers/growlab-worker/internal/processor"
+	"growlab/workers/growlab-worker/internal/store"
 )
 
 type Config struct {
@@ -20,10 +23,39 @@ type Config struct {
 }
 
 type Client struct {
-	client    paho.Client
-	metrics   *metrics.Metrics
-	processor *processor.Processor
-	logger    *slog.Logger
+	client        paho.Client
+	metrics       *metrics.Metrics
+	processor     *processor.Processor
+	logger        *slog.Logger
+	broker        string
+	clientID      string
+	connectedOnce bool
+}
+
+func (c *Client) emitLifecycle(eventType string, severity string, message string, extra map[string]any) {
+	if c.processor == nil {
+		return
+	}
+	metadata := map[string]any{
+		"broker":   c.broker,
+		"clientId": c.clientID,
+	}
+	for k, v := range extra {
+		metadata[k] = v
+	}
+	metaJSON, err := json.Marshal(metadata)
+	if err != nil {
+		metaJSON = []byte("{}")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	c.processor.EmitSystemEvent(ctx, store.SystemEvent{
+		EventType: eventType,
+		Severity:  severity,
+		Source:    "worker",
+		Message:   message,
+		Metadata:  metaJSON,
+	})
 }
 
 func New(cfg Config, processor *processor.Processor, metrics *metrics.Metrics, logger *slog.Logger) *Client {
@@ -31,6 +63,8 @@ func New(cfg Config, processor *processor.Processor, metrics *metrics.Metrics, l
 		metrics:   metrics,
 		processor: processor,
 		logger:    logger,
+		broker:    cfg.Broker,
+		clientID:  cfg.ClientID,
 	}
 
 	opts := paho.NewClientOptions().
@@ -44,9 +78,20 @@ func New(cfg Config, processor *processor.Processor, metrics *metrics.Metrics, l
 		SetDefaultPublishHandler(client.handleMessage).
 		SetConnectionLostHandler(func(_ paho.Client, err error) {
 			logger.Warn("mqtt connection lost", "error", err)
+			client.emitLifecycle("worker_mqtt_disconnected", "warning", fmt.Sprintf("mqtt connection lost: %v", err), map[string]any{"error": err.Error()})
+		}).
+		SetReconnectingHandler(func(_ paho.Client, _ *paho.ClientOptions) {
+			logger.Info("mqtt reconnecting")
 		}).
 		SetOnConnectHandler(func(c paho.Client) {
-			logger.Info("mqtt connected")
+			if client.connectedOnce {
+				logger.Info("mqtt reconnected")
+				client.emitLifecycle("worker_mqtt_reconnected", "info", "mqtt connection re-established", nil)
+			} else {
+				logger.Info("mqtt connected")
+				client.emitLifecycle("worker_mqtt_connected", "info", "mqtt connection established", nil)
+				client.connectedOnce = true
+			}
 		})
 
 	if cfg.Username != "" {

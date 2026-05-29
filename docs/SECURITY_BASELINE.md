@@ -36,7 +36,7 @@ Set `GROWLAB_CORS_ORIGINS` to the exact web origins allowed to call the API.
 Example:
 
 ```env
-GROWLAB_CORS_ORIGINS=http://app-01:3000,http://localhost:3000
+GROWLAB_CORS_ORIGINS=http://app-host:3000,http://localhost:3000
 ```
 
 ## Secrets

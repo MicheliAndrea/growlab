@@ -27,9 +27,9 @@ Completato.
 
 ## Deploy
 
-- app-01: web/api/worker/emqx/redis/ollama
-- pg-01: PostgreSQL/TimescaleDB
-- mon-01: monitoring stack esterno in repo homelab dedicata
+- app-host: web/api/worker/emqx/redis/ollama
+- db-host: PostgreSQL/TimescaleDB
+- monitoring-host: monitoring stack esterno in repo homelab dedicata
 
 ## File aggiunti
 
