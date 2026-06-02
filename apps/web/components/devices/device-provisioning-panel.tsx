@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Search } from "lucide-react";
+import { Copy, Search, ShieldX, TimerOff } from "lucide-react";
 import QRCode from "qrcode";
 
 import {
@@ -23,6 +23,7 @@ import {
   createDeviceProvisioningEntry,
   fetchDeviceProvisioning,
   queryKeys,
+  updateDeviceProvisioningEntry,
 } from "@/lib/queries";
 
 const selectClass =
@@ -81,6 +82,27 @@ export function DeviceProvisioningPanel({ devices }: { devices: Device[] }) {
       }),
     onSuccess: async () => {
       setFormError(null);
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.deviceProvisioning(activeDeviceId),
+      });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (input: {
+      provisioningId: string;
+      status: "expired" | "revoked";
+    }) =>
+      updateDeviceProvisioningEntry(activeDeviceId, input.provisioningId, {
+        status: input.status,
+        expiresAt:
+          input.status === "expired" ? new Date().toISOString() : undefined,
+        metadata: { source: "web-dashboard" },
+      }),
+    onSuccess: async () => {
+      setFormError(null);
+      setGeneratedClaimUrl("");
+      setClaimToken("");
       await queryClient.invalidateQueries({
         queryKey: queryKeys.deviceProvisioning(activeDeviceId),
       });
@@ -229,6 +251,11 @@ export function DeviceProvisioningPanel({ devices }: { devices: Device[] }) {
           {claimMutation.error.message}
         </p>
       ) : null}
+      {updateMutation.error ? (
+        <p className="text-xs text-red-600 dark:text-red-300">
+          {updateMutation.error.message}
+        </p>
+      ) : null}
       {provisioning.isLoading ? <DataNotice state="loading" /> : null}
       {provisioning.isError ? <DataNotice state="error" /> : null}
 
@@ -286,7 +313,42 @@ export function DeviceProvisioningPanel({ devices }: { devices: Device[] }) {
               title="Status"
               detail={formatDateTime(config.updatedAt)}
               meta={<StatusBadge value={config.status} />}
-            />
+            >
+              {config.status === "pending" ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    disabled={updateMutation.isPending}
+                    onClick={() =>
+                      updateMutation.mutate({
+                        provisioningId: config.id,
+                        status: "expired",
+                      })
+                    }
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <TimerOff className="h-4 w-4" aria-hidden="true" />
+                    Mark expired
+                  </Button>
+                  <Button
+                    disabled={updateMutation.isPending}
+                    onClick={() =>
+                      updateMutation.mutate({
+                        provisioningId: config.id,
+                        status: "revoked",
+                      })
+                    }
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <ShieldX className="h-4 w-4" aria-hidden="true" />
+                    Revoke
+                  </Button>
+                </div>
+              ) : null}
+            </Row>
             <Row
               title="Expires at"
               detail={formatDateTime(config.expiresAt)}

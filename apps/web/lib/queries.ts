@@ -1,5 +1,9 @@
 import {
   acknowledgeSystemAlert,
+  activateLightingProfileDefault,
+  activateZoneProfile,
+  createAutomationRule,
+  createDeviceCapability,
   claimDeviceProvisioning,
   createDeviceProvisioning,
   createFirmwareVersion,
@@ -11,7 +15,16 @@ import {
   createSensorCalibration,
   createOtaDryRun,
   createOtaJob,
+  evaluateAutomationRule,
   resolveSystemAlert,
+  setFirmwareChannelDefault,
+  updateDeviceCapability,
+  updateDeviceProvisioning,
+  updatePlantImage,
+  updateSensorCalibration,
+  updatePlantTask,
+  listAutomationRuleEvaluations,
+  listAutomationRules,
   getDeviceProvisioning,
   getHealth,
   getIrrigationSafety,
@@ -29,6 +42,8 @@ import {
   listLightingProfiles,
   listLightingSystems,
   listLightingEvents,
+  listLatestSensorReadings,
+  listSensorReadings,
   listOtaJobs,
   listPlantCategories,
   listPlantEvents,
@@ -41,11 +56,18 @@ import {
   listSystemEvents,
   listZones,
   listZoneProfiles,
+  type AutomationRule,
+  type AutomationRuleCreateRequest,
+  type AutomationRuleEvaluation,
+  type AutomationRuleEvaluationRequest,
   type Device,
   type DeviceCapability,
+  type DeviceCapabilityCreateRequest,
+  type DeviceCapabilityUpdateRequest,
   type DeviceProvisioningConfig,
   type DeviceProvisioningClaimRequest,
   type DeviceProvisioningCreateRequest,
+  type DeviceProvisioningUpdateRequest,
   type FirmwareChannel,
   type FirmwareUploadRequest,
   type FirmwareVersion,
@@ -57,6 +79,8 @@ import {
   type LightingProfileCreateRequest,
   type LightingState,
   type LightingSystem,
+  type LatestSensorReading,
+  type SensorReading,
   type OtaDryRun,
   type OtaDryRunRequest,
   type OtaJob,
@@ -66,11 +90,14 @@ import {
   type PlantEvent,
   type PlantFamily,
   type PlantImage,
+  type PlantImageUpdateRequest,
   type PlantSpecies,
   type PlantTask,
   type PlantTimelineItem,
+  type PlantTaskUpdateRequest,
   type SensorCalibration,
   type SensorCalibrationCreateRequest,
+  type SensorCalibrationUpdateRequest,
   type SystemAlertCreateRequest,
   type SystemAlertTransitionRequest,
   type SystemAlert,
@@ -118,11 +145,18 @@ export const queryKeys = {
     ["devices", deviceId, "capabilities"] as const,
   deviceProvisioning: (deviceId: string) =>
     ["devices", deviceId, "provisioning"] as const,
+  latestSensorReadings: (zoneId?: string) =>
+    ["telemetry", "latest", zoneId ?? "all"] as const,
+  sensorReadings: (sensorId: string, hours = 24, limit = 120) =>
+    ["sensors", sensorId, "readings", hours, limit] as const,
   sensorCalibrations: (sensorId: string) =>
     ["sensors", sensorId, "calibrations"] as const,
   systemAlerts: (status?: SystemAlertStatus) =>
     ["system-alerts", status ?? "all"] as const,
   systemEvents: ["system-events"] as const,
+  automationRules: ["automation-rules"] as const,
+  automationRuleEvaluations: (ruleId: string) =>
+    ["automation-rules", ruleId, "evaluations"] as const,
   lightingSystems: ["lighting-systems"] as const,
   lightingState: (lightingSystemId: string) =>
     ["lighting-systems", lightingSystemId, "state"] as const,
@@ -172,6 +206,17 @@ export async function createZoneProfileEntry(
   return response.data;
 }
 
+export async function activateZoneProfileEntry(
+  zoneId: string,
+  profileId: string,
+): Promise<ZoneProfile> {
+  const response = await activateZoneProfile(zoneId, profileId);
+  if (response.status !== 200) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+  return response.data;
+}
+
 export async function fetchPlants(): Promise<Plant[]> {
   return expectData(await listPlants());
 }
@@ -198,6 +243,17 @@ export async function fetchPlantImages(plantId: string): Promise<PlantImage[]> {
   return expectData(await listPlantImages(plantId));
 }
 
+export async function updatePlantImageMetadataEntry(
+  imageId: string,
+  request: PlantImageUpdateRequest,
+): Promise<PlantImage> {
+  const response = await updatePlantImage(imageId, request);
+  if (response.status !== 200) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+  return response.data;
+}
+
 export async function fetchPlantTasks(plantId: string): Promise<PlantTask[]> {
   return expectData(await listPlantTasks(plantId));
 }
@@ -208,6 +264,18 @@ export async function createPlantTaskEntry(
 ): Promise<PlantTask> {
   const response = await createPlantTask(plantId, request);
   if (response.status !== 201) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+  return response.data;
+}
+
+export async function updatePlantTaskEntry(
+  plantId: string,
+  taskId: string,
+  request: PlantTaskUpdateRequest,
+): Promise<PlantTask> {
+  const response = await updatePlantTask(plantId, taskId, request);
+  if (response.status !== 200) {
     throw new Error(`API request failed with status ${response.status}`);
   }
   return response.data;
@@ -237,6 +305,33 @@ export async function fetchDeviceCapabilities(
   deviceId: string,
 ): Promise<DeviceCapability[]> {
   return expectData(await listDeviceCapabilities(deviceId));
+}
+
+export async function createDeviceCapabilityEntry(
+  deviceId: string,
+  request: DeviceCapabilityCreateRequest,
+): Promise<DeviceCapability> {
+  const response = await createDeviceCapability(deviceId, request);
+  if (response.status !== 201) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+  return response.data;
+}
+
+export async function updateDeviceCapabilityEntry(
+  deviceId: string,
+  capabilityId: string,
+  request: DeviceCapabilityUpdateRequest,
+): Promise<DeviceCapability> {
+  const response = await updateDeviceCapability(
+    deviceId,
+    capabilityId,
+    request,
+  );
+  if (response.status !== 200) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+  return response.data;
 }
 
 export async function fetchDeviceProvisioning(
@@ -274,10 +369,64 @@ export async function claimDeviceProvisioningEntry(
   return response.data;
 }
 
+export async function updateDeviceProvisioningEntry(
+  deviceId: string,
+  provisioningId: string,
+  request: DeviceProvisioningUpdateRequest,
+): Promise<DeviceProvisioningConfig> {
+  const response = await updateDeviceProvisioning(
+    deviceId,
+    provisioningId,
+    request,
+  );
+  if (response.status !== 200) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+
+  return response.data;
+}
+
 export async function fetchSensorCalibrations(
   sensorId: string,
 ): Promise<SensorCalibration[]> {
   return expectData(await listSensorCalibrations(sensorId));
+}
+
+export async function updateSensorCalibrationEntry(
+  sensorId: string,
+  calibrationId: string,
+  request: SensorCalibrationUpdateRequest,
+): Promise<SensorCalibration> {
+  const response = await updateSensorCalibration(
+    sensorId,
+    calibrationId,
+    request,
+  );
+  if (response.status !== 200) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+  return response.data;
+}
+
+export async function fetchLatestSensorReadings(
+  zoneId?: string,
+): Promise<LatestSensorReading[]> {
+  return expectData(
+    await listLatestSensorReadings(zoneId ? { zoneId } : undefined),
+  );
+}
+
+export async function fetchSensorReadings(
+  sensorId: string,
+  hours = 24,
+  limit = 120,
+): Promise<SensorReading[]> {
+  const response = await listSensorReadings(sensorId, { hours, limit });
+  if (response.status !== 200) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+
+  return response.data;
 }
 
 export async function fetchSystemAlerts(
@@ -332,6 +481,41 @@ export async function resolveSystemAlertEntry(
   return response.data;
 }
 
+export async function fetchAutomationRules(): Promise<AutomationRule[]> {
+  return expectData(await listAutomationRules());
+}
+
+export async function createAutomationRuleEntry(
+  request: AutomationRuleCreateRequest,
+): Promise<AutomationRule> {
+  const response = await createAutomationRule(request);
+  if (response.status !== 201) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+  return response.data;
+}
+
+export async function fetchAutomationRuleEvaluations(
+  ruleId: string,
+): Promise<AutomationRuleEvaluation[]> {
+  const response = await listAutomationRuleEvaluations(ruleId);
+  if (response.status !== 200) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+  return response.data;
+}
+
+export async function evaluateAutomationRuleEntry(
+  ruleId: string,
+  request?: AutomationRuleEvaluationRequest,
+): Promise<AutomationRuleEvaluation> {
+  const response = await evaluateAutomationRule(ruleId, request);
+  if (response.status !== 201) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+  return response.data;
+}
+
 export async function fetchLightingSystems(): Promise<LightingSystem[]> {
   return expectData(await listLightingSystems());
 }
@@ -370,12 +554,32 @@ export async function createLightingProfileEntry(
   return response.data;
 }
 
+export async function activateLightingProfileDefaultEntry(
+  profileId: string,
+): Promise<LightingProfile> {
+  const response = await activateLightingProfileDefault(profileId);
+  if (response.status !== 200) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+  return response.data;
+}
+
 export async function fetchFirmwareVersions(): Promise<FirmwareVersion[]> {
   return expectData(await listFirmwareVersions());
 }
 
 export async function fetchFirmwareChannels(): Promise<FirmwareChannel[]> {
   return expectData(await listFirmwareChannels());
+}
+
+export async function setFirmwareChannelDefaultEntry(
+  channelId: string,
+): Promise<FirmwareChannel> {
+  const response = await setFirmwareChannelDefault(channelId);
+  if (response.status !== 200) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+  return response.data;
 }
 
 export async function uploadFirmwareVersion(

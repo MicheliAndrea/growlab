@@ -11,6 +11,8 @@ import (
 )
 
 type Querier interface {
+	CreateAutomationRule(ctx context.Context, arg CreateAutomationRuleParams) (AutomationRule, error)
+	CreateAutomationRuleEvaluation(ctx context.Context, arg CreateAutomationRuleEvaluationParams) (AutomationRuleEvaluation, error)
 	CreateDeviceCapability(ctx context.Context, arg CreateDeviceCapabilityParams) (DeviceCapability, error)
 	CreateDeviceHeartbeat(ctx context.Context, arg CreateDeviceHeartbeatParams) (DeviceHeartbeat, error)
 	CreateLightingProfile(ctx context.Context, arg CreateLightingProfileParams) (LightingProfile, error)
@@ -22,6 +24,7 @@ type Querier interface {
 	CreateSystemAlert(ctx context.Context, arg CreateSystemAlertParams) (SystemAlert, error)
 	CreateSystemEvent(ctx context.Context, arg CreateSystemEventParams) (SystemEvent, error)
 	CreateZoneProfile(ctx context.Context, arg CreateZoneProfileParams) (ZoneProfile, error)
+	GetAutomationRule(ctx context.Context, id pgtype.UUID) (AutomationRule, error)
 	GetDevice(ctx context.Context, id pgtype.UUID) (Device, error)
 	GetDeviceByUID(ctx context.Context, deviceUid string) (Device, error)
 	GetDeviceHeartbeat(ctx context.Context, arg GetDeviceHeartbeatParams) (DeviceHeartbeat, error)
@@ -40,6 +43,8 @@ type Querier interface {
 	GetSensorByDeviceUIDAndKey(ctx context.Context, arg GetSensorByDeviceUIDAndKeyParams) (Sensor, error)
 	GetSensorReading(ctx context.Context, arg GetSensorReadingParams) (SensorReading, error)
 	GetZone(ctx context.Context, id pgtype.UUID) (Zone, error)
+	ListAutomationRuleEvaluations(ctx context.Context, arg ListAutomationRuleEvaluationsParams) ([]AutomationRuleEvaluation, error)
+	ListAutomationRules(ctx context.Context) ([]AutomationRule, error)
 	ListDeviceCapabilities(ctx context.Context, deviceID pgtype.UUID) ([]DeviceCapability, error)
 	ListDeviceHeartbeats(ctx context.Context, arg ListDeviceHeartbeatsParams) ([]DeviceHeartbeat, error)
 	ListDeviceModules(ctx context.Context, deviceID pgtype.UUID) ([]DeviceModule, error)

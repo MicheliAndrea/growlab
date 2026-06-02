@@ -15,7 +15,8 @@
     "incremental": false,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@growlab/openapi-client/*": ["../../packages/openapi-client/*"]
     },
     "plugins": [
       {

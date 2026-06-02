@@ -114,7 +114,9 @@ Completato.
 
 - Aggiornato `openapi/growlab.openapi.yaml` come source of truth OpenAPI 3.0.3.
 - Aggiunti gli endpoint minimi di STEP 04 per health, zone, piante, device, luci, firmware e irrigazione disabilitata.
-- Integrati nel contratto i moduli STEP 03B: system events, system alerts, zone profiles, plant tasks, device capabilities, sensor calibrations, lighting profiles, firmware channels, OTA dry-run, provisioning metadata e growth tracking immagini.
+- Integrati nel contratto i moduli STEP 03B: system events, system alerts, zone profiles create/list/activate, plant tasks create/list/update status, device capabilities create/list/update enabled, sensor calibrations create/list/update status, lighting profiles create/list/set default, firmware channels con default configurabile, OTA dry-run, provisioning metadata con revoke/expire manuale e growth tracking immagini create/update.
+- Aggiunti i contratti telemetry per `GET /api/telemetry/latest` e `GET /api/sensors/{id}/readings`.
+- Aggiunti i contratti rules engine MVP per regole manuali, valutazioni e storico.
 - Aggiunte response standard `BadRequest` e `NotFound`.
 - Definita `IrrigationDisabledResponse` con codice `IRRIGATION_DISABLED`.
 - Aggiunto `orval.config.ts` per generare il client TypeScript in `packages/openapi-client`.
@@ -190,7 +192,7 @@ Completato.
 - Aggiunto service domain in `apps/api/internal/services/domain.go`.
 - Aggiunti handler sottili in `apps/api/internal/handlers/domain.go`.
 - Registrate le rotte domain in `apps/api/internal/http/router.go`.
-- Coperti i moduli principali: zone, zone profiles, piante, plant timeline, Plant Wiki, immagini metadata, plant tasks, system events, system alerts, device capabilities, provisioning metadata, sensor calibrations, lighting systems/profiles, firmware metadata, OTA metadata e irrigation disabled.
+- Coperti i moduli principali: zone, zone profiles create/list/activate, piante, plant timeline, Plant Wiki, immagini metadata create/update, plant tasks create/list/update status, system events, system alerts, rules engine MVP, device capabilities create/list/update enabled, provisioning metadata con revoke/expire manuale, sensor calibrations create/list/update status, lighting systems/profiles create/list/set default, firmware metadata con channel default configurabile, OTA metadata e irrigation disabled.
 - Allineato OpenAPI con le rotte Plant Wiki e con `growAreaId` obbligatorio per le zone, coerente con il vincolo DB.
 - Il provisioning device espone create/claim flow, con token mostrato solo in risposta di creazione e mai persistito in chiaro.
 - Il modulo irrigazione continua a non avviare nulla: `POST /api/irrigation/{id}/manual-run` ritorna `IRRIGATION_DISABLED`.
@@ -226,6 +228,7 @@ Completato.
 - Aggiunta migrazione `database/migrations/000003_worker_mqtt_ingestion.sql` per `devices.last_seen_at`.
 - Implementato aggiornamento `devices.last_seen_at`, `devices.status` e `devices.firmware_version` dai messaggi MQTT.
 - Implementato aggiornamento metadata/stato OTA job da topic `ota/status`.
+- Aggiunti endpoint API `GET /api/telemetry/latest` e `GET /api/sensors/{id}/readings` per leggere ultime letture e storico sensore a finestra limitata.
 - Aggiunte metriche Prometheus worker:
   - `growlab_worker_mqtt_messages_total`
   - `growlab_worker_mqtt_errors_total`
@@ -303,6 +306,16 @@ Completato.
 - Aggiunti componenti dashboard riusabili per header, metriche, pannelli, righe, badge, stati loading/error/empty.
 - Implementato Alert MVP nella dashboard web con acknowledge/resolve.
 - Aggiunti grafici dashboard Recharts per carico operativo, distribuzione risorse, alert, salute piante, stato device e severita eventi.
+- Aggiunta sezione dashboard `Latest telemetry` basata su `GET /api/telemetry/latest`.
+- Aggiunto grafico `Telemetry coverage` per copertura sensori per tipo.
+- Aggiunto storico letture nel pannello `Sensor calibration`, basato su `GET /api/sensors/{id}/readings`.
+- Aggiunto pannello rules engine nella console `Operations` con creazione regola, valutazione manuale, dry-run predefinito e storico valutazioni.
+- Aggiunta form `Add capability` nella pagina `Devices` per creare manualmente capability device con config e metadata JSON.
+- Aggiunto toggle manuale `Enable/Disable` sulle capability device, tramite `PATCH /api/devices/{id}/capabilities/{capabilityId}`.
+- Aggiunti controlli checklist nel dettaglio pianta per marcare task come `done`, riaprire in `todo`, `skipped` o `cancelled`.
+- Aggiunto bottone `Activate` sui target profile della zona; l'attivazione usa transazione e mantiene un solo profilo attivo per zona.
+- Aggiunto `Set default` sui lighting profiles; il cambio default usa transazione e mantiene un solo default per zona senza inviare comandi Shelly.
+- Aggiunti `Confirm`, `Retire` e `Reopen` sulle sensor calibrations; `confirmed` valorizza `confirmed_at`, `draft` lo azzera e `retired` preserva lo storico.
 - Rivisto design system generale con token CSS light/dark e variabili chart.
 - Aggiunto selettore tema `Light / Dark / System`, persistito in `localStorage`.
 - Allineato il runtime fetcher Orval al default API locale `http://localhost:8080` quando `NEXT_PUBLIC_API_BASE_URL` non e impostata.
@@ -422,7 +435,7 @@ Implementata una pagina read-only dedicata al display sempre aperto.
 
 - Aggiunta la route `/kiosk`.
 - Aggiunto `Kiosk` alla navigazione principale.
-- La pagina mostra ora/data, stato API, zone, piante, device online/offline, alert attivi, ultimi eventi e ultime immagini.
+- La pagina mostra ora/data, stato API, zone, piante, device online/offline, telemetria live, alert attivi, ultimi eventi e ultime immagini.
 - Nessuna azione pericolosa esposta nella vista kiosk.
 
 Verifiche leggere eseguite:
@@ -441,6 +454,8 @@ Implementata una timeline fotografica leggibile sopra i metadata immagine già e
 - La timeline è visibile nel dettaglio pianta e nella pagina immagini.
 - Le immagini sono ordinate per data di acquisizione/upload.
 - Sono esposti growth stage, tag e indicazione di growth tracking quando presente.
+- Aggiunto editor manuale nella pagina immagini per aggiornare growth stage, tag e `growth_tracking` JSON.
+- Aggiunto `PATCH /api/images/{id}` per aggiornare metadata immagine senza modificare il file.
 
 Verifiche leggere eseguite:
 
@@ -452,10 +467,11 @@ git diff --check
 
 ## STEP 25 - Device Provisioning
 
-Implementato il create/claim flow minimo per il provisioning dei device.
+Implementato il create/claim/revoke/expire flow minimo per il provisioning dei device.
 
 - Aggiunto `DeviceProvisioningPanel` nella pagina `Devices`.
 - La vista permette di selezionare o cercare un device, generare un provisioning token, copiare il claim URL, visualizzare il QR code e marcare una richiesta come claimed.
+- Aggiunti `Revoke` e `Mark expired` per chiudere manualmente provisioning pendenti tramite `PATCH /api/devices/{id}/provisioning/{provisioningId}`.
 - Il token non viene salvato in chiaro nel database: resta solo l'hash, mentre il token viene restituito una sola volta in risposta alla creazione.
 - La UI continua a mostrare provisioning status, expiry, claimed-at, config JSON e metadata.
 
@@ -601,6 +617,8 @@ Completato.
 - Salvati artefatti firmware su filesystem sotto `GROWLAB_FIRMWARE_STORAGE_PATH`.
 - Aggiunto limite upload `GROWLAB_FIRMWARE_UPLOAD_MAX_BYTES`, default `32 MiB`.
 - Salvati in `firmware_versions` path relativo, SHA-256, size, channel e metadata upload.
+- Il `channelId` omesso usa il firmware channel default configurabile.
+- Aggiunto `POST /api/firmware/channels/{id}/default` con UI manuale sulla pagina `/firmware`.
 - Aggiunto `GET /api/firmware/{id}/file` per servire artefatti firmware da path controllato.
 - Aggiunto `GET /api/devices/{id}/ota` per lista OTA job del device.
 - `POST /api/devices/{id}/ota/dry-run` ora produce report minimo di compatibilita device/firmware.
@@ -829,9 +847,10 @@ Note:
 Implementato in forma manuale nel frontend.
 
 - Aggiunta la query client `fetchSensorCalibrations`.
+- Aggiunta la query client `fetchSensorReadings` per storico 24h del sensore.
 - Aggiunto il mutator client `createSensorCalibrationEntry`.
 - Aggiunta la sezione `Sensor calibration` nella pagina `Devices`.
-- La pagina permette di caricare un sensor ID, creare una calibrazione manuale e visualizzare le calibrazioni recenti.
+- La pagina permette di caricare un sensor ID, creare una calibrazione manuale, visualizzare le calibrazioni recenti e leggere lo storico telemetria recente con mini chart.
 - La procedura guidata completa resta documentata come evoluzione futura.
 
 Verifiche leggere eseguite:
@@ -890,6 +909,27 @@ Verifiche leggere eseguite:
 pnpm exec prettier --write apps/web/lib/export.ts apps/web/components/dashboard/export-button.tsx apps/web/app/plants/page.tsx apps/web/app/zones/page.tsx apps/web/app/devices/page.tsx apps/web/app/images/page.tsx apps/web/app/firmware/page.tsx apps/web/components/plants/plant-detail.tsx docs/IMPLEMENTATION_STATUS.md
 pnpm --filter @growlab/web exec tsc --noEmit --pretty false
 git diff --check
+```
+
+## STEP 21 - Rules Engine MVP
+
+Implementato un rules engine consultivo e manuale.
+
+- Aggiunta migrazione `database/migrations/000005_rules_engine_mvp.sql` con `automation_rules` e `automation_rule_evaluations`.
+- Aggiunte query sqlc minime in `database/queries/rules.sql`.
+- Aggiunti endpoint API per lista/creazione regole, valutazione manuale e storico valutazioni.
+- La valutazione supporta condizioni JSON con `fact`, `operator`, `value`, gruppi `all`/`any` e contesto runtime fornito dalla UI/API.
+- Le azioni consentite sono solo `create_alert`, `create_system_event` e `show_dashboard_suggestion`.
+- Il frontend espone creazione regola, dry-run predefinito, commit esplicito delle sole azioni sicure e storico valutazioni nella console `Operations`.
+- Non sono stati introdotti scheduler automatici, AI, comandi pompe, comandi irrigazione o modifiche lighting automatiche.
+
+Verifiche leggere eseguite:
+
+```bash
+make openapi-generate
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+GOCACHE=/tmp/growlab-go-build go list ./apps/api/...
+git diff --check -- apps/api apps/web openapi docs packages database package.json pnpm-lock.yaml
 ```
 
 ## STEP 25 - Device Provisioning
@@ -997,9 +1037,10 @@ Note:
 Implementato in forma manuale nel frontend.
 
 - Aggiunta la query client `fetchSensorCalibrations`.
+- Aggiunta la query client `fetchSensorReadings` per storico 24h del sensore.
 - Aggiunto il mutator client `createSensorCalibrationEntry`.
 - Aggiunta la sezione `Sensor calibration` nella pagina `Devices`.
-- La pagina permette di caricare un sensor ID, creare una calibrazione manuale e visualizzare le calibrazioni recenti.
+- La pagina permette di caricare un sensor ID, creare una calibrazione manuale, visualizzare le calibrazioni recenti e leggere lo storico telemetria recente con mini chart.
 - La procedura guidata completa resta documentata come evoluzione futura.
 
 Verifiche leggere eseguite:

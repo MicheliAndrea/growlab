@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { RefreshCcw } from "lucide-react";
 
@@ -29,7 +29,9 @@ import {
   fetchPlantTimeline,
   fetchZones,
   queryKeys,
+  updatePlantTaskEntry,
 } from "@/lib/queries";
+import type { PlantTask, PlantTaskUpdateRequestStatus } from "@/lib/api";
 
 const poll = 30_000;
 
@@ -64,6 +66,28 @@ export function PlantDetail({ plantId }: { plantId: string }) {
     queryKey: queryKeys.plantTasks(plantId),
     queryFn: () => fetchPlantTasks(plantId),
     refetchInterval: poll,
+  });
+  const updateTaskMutation = useMutation({
+    mutationFn: (input: {
+      taskId: string;
+      status: PlantTaskUpdateRequestStatus;
+    }) =>
+      updatePlantTaskEntry(plantId, input.taskId, {
+        status: input.status,
+        completedAt:
+          input.status === "done" ? new Date().toISOString() : undefined,
+        metadata: {
+          source: "web-dashboard",
+        },
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.plantTasks(plantId),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.plantTimeline(plantId),
+      });
+    },
   });
   const zone = zones.data?.find((item) => item.id === plant.data?.zoneId);
 
@@ -243,14 +267,21 @@ export function PlantDetail({ plantId }: { plantId: string }) {
 
           {tasks.isLoading ? <DataNotice state="loading" /> : null}
           {tasks.isError ? <DataNotice state="error" /> : null}
+          {updateTaskMutation.error ? (
+            <p className="text-xs text-red-600 dark:text-red-300">
+              {updateTaskMutation.error.message}
+            </p>
+          ) : null}
           {tasks.data && tasks.data.length > 0 ? (
             <RowList>
               {tasks.data.map((task) => (
-                <Row
+                <TaskRow
                   key={task.id}
-                  title={task.title}
-                  detail={task.description ?? formatDateTime(task.dueAt)}
-                  meta={<StatusBadge value={task.status} />}
+                  task={task}
+                  isPending={updateTaskMutation.isPending}
+                  onStatusChange={(status) =>
+                    updateTaskMutation.mutate({ taskId: task.id, status })
+                  }
                 />
               ))}
             </RowList>
@@ -263,6 +294,67 @@ export function PlantDetail({ plantId }: { plantId: string }) {
         </div>
       </DataPanel>
     </div>
+  );
+}
+
+function TaskRow({
+  task,
+  isPending,
+  onStatusChange,
+}: {
+  task: PlantTask;
+  isPending: boolean;
+  onStatusChange: (status: PlantTaskUpdateRequestStatus) => void;
+}) {
+  return (
+    <Row
+      title={task.title}
+      detail={task.description ?? formatDateTime(task.dueAt)}
+      meta={<StatusBadge value={task.status} />}
+    >
+      <span className="text-xs text-muted-foreground">
+        {formatDateTime(task.completedAt)}
+      </span>
+      {task.status !== "done" ? (
+        <Button
+          disabled={isPending}
+          onClick={() => onStatusChange("done")}
+          size="sm"
+          variant="outline"
+        >
+          Done
+        </Button>
+      ) : (
+        <Button
+          disabled={isPending}
+          onClick={() => onStatusChange("todo")}
+          size="sm"
+          variant="outline"
+        >
+          Reopen
+        </Button>
+      )}
+      {task.status === "todo" ? (
+        <>
+          <Button
+            disabled={isPending}
+            onClick={() => onStatusChange("skipped")}
+            size="sm"
+            variant="secondary"
+          >
+            Skip
+          </Button>
+          <Button
+            disabled={isPending}
+            onClick={() => onStatusChange("cancelled")}
+            size="sm"
+            variant="secondary"
+          >
+            Cancel
+          </Button>
+        </>
+      ) : null}
+    </Row>
   );
 }
 

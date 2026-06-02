@@ -11,8 +11,9 @@ import (
 	"log/slog"
 	"math"
 	"net/url"
+	"reflect"
+	"strconv"
 	"strings"
-	"time"
 
 	"growlab/apps/api/internal/repositories"
 	"growlab/apps/api/internal/shelly"
@@ -100,6 +101,30 @@ func (s *DomainService) ListZoneProfiles(ctx context.Context, zoneID string) ([]
 }
 
 func (s *DomainService) CreateZoneProfile(ctx context.Context, zoneID string, body map[string]any) (repositories.Record, error) {
+	if boolField(body, "isActive", false) {
+		var record repositories.Record
+		err := s.repo.WithTx(ctx, func(repo *repositories.Repository) error {
+			if _, err := repo.Exec(ctx, `UPDATE zone_profiles SET is_active = false, updated_at = now() WHERE zone_id = $1::uuid`, zoneID); err != nil {
+				return err
+			}
+			created, err := repo.QueryOne(ctx, `
+INSERT INTO zone_profiles (zone_id, name, is_active, target_config, metadata)
+VALUES ($1::uuid, $2, true, $3::jsonb, $4::jsonb)
+RETURNING *`,
+				zoneID,
+				stringField(body, "name"),
+				jsonField(body, "targetConfig"),
+				jsonField(body, "metadata"),
+			)
+			if err != nil {
+				return err
+			}
+			record = created
+			return nil
+		})
+		return record, err
+	}
+
 	return s.repo.QueryOne(ctx, `
 INSERT INTO zone_profiles (zone_id, name, is_active, target_config, metadata)
 VALUES ($1::uuid, $2, $3, $4::jsonb, $5::jsonb)
@@ -110,6 +135,31 @@ RETURNING *`,
 		jsonField(body, "targetConfig"),
 		jsonField(body, "metadata"),
 	)
+}
+
+func (s *DomainService) ActivateZoneProfile(ctx context.Context, zoneID string, profileID string) (repositories.Record, error) {
+	var record repositories.Record
+	err := s.repo.WithTx(ctx, func(repo *repositories.Repository) error {
+		if _, err := repo.Exec(ctx, `UPDATE zone_profiles SET is_active = false, updated_at = now() WHERE zone_id = $1::uuid`, zoneID); err != nil {
+			return err
+		}
+		activated, err := repo.QueryOne(ctx, `
+UPDATE zone_profiles
+SET is_active = true,
+    updated_at = now()
+WHERE id = $1::uuid
+  AND zone_id = $2::uuid
+RETURNING *`,
+			profileID,
+			zoneID,
+		)
+		if err != nil {
+			return err
+		}
+		record = activated
+		return nil
+	})
+	return record, err
 }
 
 func (s *DomainService) ListPlants(ctx context.Context, zoneID string) ([]repositories.Record, error) {
@@ -270,6 +320,43 @@ GROUP BY plant_images.id`,
 	)
 }
 
+func (s *DomainService) UpdatePlantImageMetadata(ctx context.Context, id string, body map[string]any) (repositories.Record, error) {
+	return s.repo.QueryOne(ctx, `
+WITH updated AS (
+  UPDATE plant_images
+  SET growth_stage = $2,
+      growth_tracking = $3::jsonb,
+      metadata = metadata || $4::jsonb
+  WHERE id = $1::uuid
+  RETURNING *
+),
+deleted_tags AS (
+  DELETE FROM plant_image_tags
+  WHERE plant_image_id = (SELECT id FROM updated)
+  RETURNING 1
+),
+inserted_tags AS (
+  INSERT INTO plant_image_tags (plant_image_id, tag)
+  SELECT updated.id, tag.value
+  FROM updated, jsonb_array_elements_text($5::jsonb) AS tag(value)
+  ON CONFLICT DO NOTHING
+  RETURNING tag
+)
+SELECT updated.*,
+       COALESCE((
+         SELECT jsonb_agg(plant_image_tags.tag ORDER BY plant_image_tags.tag)
+         FROM plant_image_tags
+         WHERE plant_image_tags.plant_image_id = updated.id
+       ), '[]'::jsonb) AS tags
+FROM updated`,
+		id,
+		nullableString(body, "growthStage"),
+		jsonField(body, "growthTracking"),
+		jsonField(body, "metadata"),
+		jsonArrayField(body, "tags"),
+	)
+}
+
 func (s *DomainService) CreatePlantImageMetadata(ctx context.Context, plantID string, body map[string]any) (repositories.Record, error) {
 	result, err := s.repo.QueryOne(ctx, `
 WITH created AS (
@@ -347,6 +434,28 @@ RETURNING *`,
 		nullableString(body, "description"),
 		nullableString(body, "dueAt"),
 		jsonField(body, "recurrenceConfig"),
+		jsonField(body, "metadata"),
+	)
+}
+
+func (s *DomainService) UpdatePlantTask(ctx context.Context, plantID string, taskID string, body map[string]any) (repositories.Record, error) {
+	return s.repo.QueryOne(ctx, `
+UPDATE plant_tasks
+SET status = $3,
+    completed_at = CASE
+      WHEN $3 = 'done' THEN COALESCE($4::timestamptz, now())
+      WHEN $3 = 'todo' THEN NULL
+      ELSE completed_at
+    END,
+    metadata = metadata || $5::jsonb,
+    updated_at = now()
+WHERE id = $1::uuid
+  AND plant_id = $2::uuid
+RETURNING *`,
+		taskID,
+		plantID,
+		stringField(body, "status"),
+		nullableString(body, "completedAt"),
 		jsonField(body, "metadata"),
 	)
 }
@@ -450,6 +559,98 @@ RETURNING *`,
 	)
 }
 
+func (s *DomainService) ListAutomationRules(ctx context.Context) ([]repositories.Record, error) {
+	return s.repo.Query(ctx, `SELECT * FROM automation_rules ORDER BY enabled DESC, updated_at DESC, name`)
+}
+
+func (s *DomainService) CreateAutomationRule(ctx context.Context, body map[string]any) (repositories.Record, error) {
+	name := stringField(body, "name")
+	slug := stringField(body, "slug")
+	if slug == "" {
+		slug = slugify(name)
+	}
+	return s.repo.QueryOne(ctx, `
+INSERT INTO automation_rules (name, slug, description, enabled, severity, condition_config, action_config, metadata)
+VALUES ($1, $2, $3, $4, COALESCE($5, 'warning'), $6::jsonb, $7::jsonb, $8::jsonb)
+RETURNING *`,
+		name,
+		slug,
+		nullableString(body, "description"),
+		boolField(body, "enabled", true),
+		nullableString(body, "severity"),
+		jsonField(body, "conditionConfig"),
+		jsonField(body, "actionConfig"),
+		jsonField(body, "metadata"),
+	)
+}
+
+func (s *DomainService) ListAutomationRuleEvaluations(ctx context.Context, id string) ([]repositories.Record, error) {
+	return s.repo.Query(ctx, `
+SELECT *
+FROM automation_rule_evaluations
+WHERE rule_id = $1::uuid
+ORDER BY evaluated_at DESC
+LIMIT 50`,
+		id,
+	)
+}
+
+func (s *DomainService) EvaluateAutomationRule(ctx context.Context, id string, body map[string]any) (repositories.Record, error) {
+	rule, err := s.repo.QueryOne(ctx, `SELECT * FROM automation_rules WHERE id = $1::uuid`, id)
+	if err != nil {
+		return nil, err
+	}
+
+	evaluationContext := objectValue(body["evaluationContext"])
+	commit := boolField(body, "commit", false)
+	mode := "dry_run"
+	if commit {
+		mode = "committed"
+	}
+
+	enabled, _ := rule["enabled"].(bool)
+	matched := false
+	result := repositories.Record{
+		"matched": false,
+		"reason":  "rule_disabled",
+	}
+	if enabled {
+		matched, result = evaluateAutomationCondition(objectValue(rule["conditionConfig"]), evaluationContext)
+	}
+
+	actions := s.evaluateAutomationActions(ctx, rule, evaluationContext, matched, commit)
+	evaluation, err := s.repo.QueryOne(ctx, `
+INSERT INTO automation_rule_evaluations (rule_id, matched, mode, evaluation_context, result, actions, evaluated_by)
+VALUES ($1::uuid, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7)
+RETURNING *`,
+		id,
+		matched,
+		mode,
+		mustJSON(evaluationContext),
+		mustJSON(result),
+		mustJSON(actions),
+		nullableString(body, "evaluatedBy"),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = s.repo.Exec(ctx, `
+UPDATE automation_rules
+SET last_evaluated_at = now(),
+    last_matched_at = CASE WHEN $2 THEN now() ELSE last_matched_at END,
+    updated_at = now()
+WHERE id = $1::uuid`,
+		id,
+		matched,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return evaluation, nil
+}
+
 func (s *DomainService) ListDevices(ctx context.Context) ([]repositories.Record, error) {
 	return s.repo.Query(ctx, `SELECT * FROM devices ORDER BY name`)
 }
@@ -460,6 +661,36 @@ func (s *DomainService) GetDevice(ctx context.Context, id string) (repositories.
 
 func (s *DomainService) ListDeviceCapabilities(ctx context.Context, deviceID string) ([]repositories.Record, error) {
 	return s.repo.Query(ctx, `SELECT * FROM device_capabilities WHERE device_id = $1::uuid ORDER BY capability_type, capability_key`, deviceID)
+}
+
+func (s *DomainService) CreateDeviceCapability(ctx context.Context, deviceID string, body map[string]any) (repositories.Record, error) {
+	return s.repo.QueryOne(ctx, `
+INSERT INTO device_capabilities (device_id, capability_key, capability_type, enabled, config, metadata)
+VALUES ($1::uuid, $2, $3, $4, $5::jsonb, $6::jsonb)
+RETURNING *`,
+		deviceID,
+		stringField(body, "capabilityKey"),
+		stringField(body, "capabilityType"),
+		boolField(body, "enabled", true),
+		jsonField(body, "config"),
+		jsonField(body, "metadata"),
+	)
+}
+
+func (s *DomainService) UpdateDeviceCapability(ctx context.Context, deviceID string, capabilityID string, body map[string]any) (repositories.Record, error) {
+	return s.repo.QueryOne(ctx, `
+UPDATE device_capabilities
+SET enabled = $3,
+    metadata = metadata || $4::jsonb,
+    updated_at = now()
+WHERE id = $1::uuid
+  AND device_id = $2::uuid
+RETURNING *`,
+		capabilityID,
+		deviceID,
+		boolField(body, "enabled", false),
+		jsonField(body, "metadata"),
+	)
 }
 
 func (s *DomainService) GetDeviceProvisioning(ctx context.Context, deviceID string) (repositories.Record, error) {
@@ -530,6 +761,52 @@ SELECT * FROM created`,
 	return record, nil
 }
 
+func (s *DomainService) UpdateDeviceProvisioning(ctx context.Context, deviceID string, provisioningID string, body map[string]any) (repositories.Record, error) {
+	status := stringField(body, "status")
+	record, err := s.repo.QueryOne(ctx, `
+UPDATE device_provisioning_configs
+SET status = $3,
+    expires_at = CASE
+      WHEN $3 = 'expired' THEN COALESCE($4::timestamptz, now())
+      ELSE expires_at
+    END,
+    metadata = metadata || $5::jsonb,
+    updated_at = now()
+WHERE id = $1::uuid
+  AND device_id = $2::uuid
+RETURNING id, device_id, status, provisioning_config, expires_at, claimed_at, metadata, created_at, updated_at`,
+		provisioningID,
+		deviceID,
+		status,
+		nullableString(body, "expiresAt"),
+		jsonField(body, "metadata"),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	eventType := "device_provisioning_updated"
+	if status == "revoked" {
+		eventType = "device_provisioning_revoked"
+	}
+	if status == "expired" {
+		eventType = "device_provisioning_expired"
+	}
+	s.emitSystemEvent(ctx, systemEventInput{
+		EventType: eventType,
+		Severity:  "info",
+		Source:    "api",
+		DeviceID:  deviceID,
+		Message:   fmt.Sprintf("device provisioning %s set to %s", provisioningID, status),
+		Metadata: map[string]any{
+			"deviceProvisioningConfigId": provisioningID,
+			"status":                     status,
+		},
+	})
+
+	return record, nil
+}
+
 func (s *DomainService) ClaimDeviceProvisioning(ctx context.Context, token string) (repositories.Record, error) {
 	tokenHash := hashProvisioningToken(token)
 	record, err := s.repo.QueryOne(ctx, `
@@ -565,6 +842,74 @@ func (s *DomainService) ListSensorCalibrations(ctx context.Context, sensorID str
 	return s.repo.Query(ctx, `SELECT * FROM sensor_calibrations WHERE sensor_id = $1::uuid ORDER BY created_at DESC`, sensorID)
 }
 
+func (s *DomainService) ListLatestSensorReadings(ctx context.Context, zoneID string) ([]repositories.Record, error) {
+	return s.repo.Query(ctx, `
+WITH latest AS (
+  SELECT DISTINCT ON (sr.sensor_id)
+    sr.id,
+    sr.sensor_id,
+    s.sensor_key,
+    s.sensor_type,
+    s.unit,
+    d.id AS device_id,
+    d.name AS device_name,
+    d.device_uid,
+    d.zone_id,
+    z.name AS zone_name,
+    sr.recorded_at,
+    sr.value_double,
+    sr.metadata,
+    sr.created_at
+  FROM sensor_readings sr
+  JOIN sensors s ON s.id = sr.sensor_id
+  JOIN devices d ON d.id = s.device_id
+  LEFT JOIN zones z ON z.id = d.zone_id
+  WHERE NULLIF($1, '')::uuid IS NULL
+     OR d.zone_id = NULLIF($1, '')::uuid
+  ORDER BY sr.sensor_id, sr.recorded_at DESC
+)
+SELECT *
+FROM latest
+ORDER BY zone_name NULLS LAST, device_name, sensor_key
+LIMIT 200`,
+		zoneID,
+	)
+}
+
+func (s *DomainService) ListSensorReadings(ctx context.Context, sensorID string, hoursRaw string, limitRaw string) ([]repositories.Record, error) {
+	hours := boundedInt(hoursRaw, 24, 1, 720)
+	limit := boundedInt(limitRaw, 120, 1, 500)
+
+	return s.repo.Query(ctx, `
+SELECT
+  sr.id,
+  sr.sensor_id,
+  s.sensor_key,
+  s.sensor_type,
+  s.unit,
+  d.id AS device_id,
+  d.name AS device_name,
+  d.device_uid,
+  d.zone_id,
+  z.name AS zone_name,
+  sr.recorded_at,
+  sr.value_double,
+  sr.metadata,
+  sr.created_at
+FROM sensor_readings sr
+JOIN sensors s ON s.id = sr.sensor_id
+JOIN devices d ON d.id = s.device_id
+LEFT JOIN zones z ON z.id = d.zone_id
+WHERE sr.sensor_id = $1::uuid
+  AND sr.recorded_at >= now() - ($2::int * interval '1 hour')
+ORDER BY sr.recorded_at DESC
+LIMIT $3::int`,
+		sensorID,
+		hours,
+		limit,
+	)
+}
+
 func (s *DomainService) CreateSensorCalibration(ctx context.Context, sensorID string, body map[string]any) (repositories.Record, error) {
 	return s.repo.QueryOne(ctx, `
 INSERT INTO sensor_calibrations (sensor_id, method, status, calibration_data, raw_points, notes, metadata)
@@ -576,6 +921,28 @@ RETURNING *`,
 		jsonField(body, "calibrationData"),
 		jsonField(body, "rawPoints"),
 		nullableString(body, "notes"),
+		jsonField(body, "metadata"),
+	)
+}
+
+func (s *DomainService) UpdateSensorCalibration(ctx context.Context, sensorID string, calibrationID string, body map[string]any) (repositories.Record, error) {
+	return s.repo.QueryOne(ctx, `
+UPDATE sensor_calibrations
+SET status = $3,
+    confirmed_at = CASE
+      WHEN $3 = 'confirmed' THEN COALESCE($4::timestamptz, now())
+      WHEN $3 = 'draft' THEN NULL
+      ELSE confirmed_at
+    END,
+    metadata = metadata || $5::jsonb,
+    updated_at = now()
+WHERE id = $1::uuid
+  AND sensor_id = $2::uuid
+RETURNING *`,
+		calibrationID,
+		sensorID,
+		stringField(body, "status"),
+		nullableString(body, "confirmedAt"),
 		jsonField(body, "metadata"),
 	)
 }
@@ -626,7 +993,27 @@ func (s *DomainService) ListLightingProfiles(ctx context.Context, zoneID string)
 }
 
 func (s *DomainService) CreateLightingProfile(ctx context.Context, body map[string]any) (repositories.Record, error) {
-	return s.repo.QueryOne(ctx, `
+	if boolField(body, "isDefault", false) {
+		var record repositories.Record
+		err := s.repo.WithTx(ctx, func(repo *repositories.Repository) error {
+			if _, err := repo.Exec(ctx, `UPDATE lighting_profiles SET is_default = false, updated_at = now() WHERE zone_id = $1::uuid`, stringField(body, "zoneId")); err != nil {
+				return err
+			}
+			created, err := createLightingProfileRecord(ctx, repo, body)
+			if err != nil {
+				return err
+			}
+			record = created
+			return nil
+		})
+		return record, err
+	}
+
+	return createLightingProfileRecord(ctx, s.repo, body)
+}
+
+func createLightingProfileRecord(ctx context.Context, repo *repositories.Repository, body map[string]any) (repositories.Record, error) {
+	return repo.QueryOne(ctx, `
 WITH created AS (
 INSERT INTO lighting_profiles (zone_id, lighting_system_id, name, enabled, is_default, timezone, metadata)
 VALUES ($1::uuid, $2::uuid, $3, $4, $5, COALESCE($6, 'UTC'), $7::jsonb)
@@ -678,6 +1065,30 @@ FROM created`,
 		jsonField(body, "metadata"),
 		jsonArrayField(body, "steps"),
 	)
+}
+
+func (s *DomainService) ActivateLightingProfileDefault(ctx context.Context, id string) (repositories.Record, error) {
+	var record repositories.Record
+	err := s.repo.WithTx(ctx, func(repo *repositories.Repository) error {
+		profile, err := repo.QueryOne(ctx, `SELECT zone_id FROM lighting_profiles WHERE id = $1::uuid`, id)
+		if err != nil {
+			return err
+		}
+		zoneID := stringValue(profile["zoneId"])
+		if _, err := repo.Exec(ctx, `UPDATE lighting_profiles SET is_default = false, updated_at = now() WHERE zone_id = $1::uuid`, zoneID); err != nil {
+			return err
+		}
+		if _, err := repo.Exec(ctx, `UPDATE lighting_profiles SET is_default = true, updated_at = now() WHERE id = $1::uuid`, id); err != nil {
+			return err
+		}
+		activated, err := repo.QueryOne(ctx, lightingProfileSelect+` WHERE lp.id = $1::uuid`, id)
+		if err != nil {
+			return err
+		}
+		record = activated
+		return nil
+	})
+	return record, err
 }
 
 func (s *DomainService) LightingCommand(ctx context.Context, id string, action string, body map[string]any) (repositories.Record, error) {
@@ -833,6 +1244,302 @@ func intNumber(body map[string]any, key string) int {
 	}
 }
 
+func boundedInt(value string, fallback int, minValue int, maxValue int) int {
+	parsed, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil {
+		return fallback
+	}
+	if parsed < minValue {
+		return minValue
+	}
+	if parsed > maxValue {
+		return maxValue
+	}
+	return parsed
+}
+
+func (s *DomainService) evaluateAutomationActions(ctx context.Context, rule repositories.Record, evaluationContext map[string]any, matched bool, commit bool) []map[string]any {
+	actionConfig := objectValue(rule["actionConfig"])
+	rawActions, _ := actionConfig["actions"].([]any)
+	results := make([]map[string]any, 0, len(rawActions))
+	if !matched {
+		return results
+	}
+
+	for index, rawAction := range rawActions {
+		action := objectValue(rawAction)
+		actionType := stringValue(action["type"])
+		result := map[string]any{
+			"type":   actionType,
+			"index":  index,
+			"status": "dry_run",
+		}
+		if actionType == "" {
+			result["status"] = "blocked"
+			result["reason"] = "missing_action_type"
+			results = append(results, result)
+			continue
+		}
+		if !isSafeRuleAction(actionType) {
+			result["status"] = "blocked"
+			result["reason"] = "unsafe_action_type"
+			results = append(results, result)
+			continue
+		}
+		if !commit {
+			results = append(results, result)
+			continue
+		}
+
+		created, err := s.commitAutomationAction(ctx, rule, action, evaluationContext)
+		if err != nil {
+			result["status"] = "failed"
+			result["error"] = err.Error()
+			results = append(results, result)
+			continue
+		}
+		result["status"] = "created"
+		for key, value := range created {
+			result[key] = value
+		}
+		results = append(results, result)
+	}
+
+	return results
+}
+
+func (s *DomainService) commitAutomationAction(ctx context.Context, rule repositories.Record, action map[string]any, evaluationContext map[string]any) (map[string]any, error) {
+	actionType := stringValue(action["type"])
+	severity := firstNonEmpty(stringValue(action["severity"]), stringValue(rule["severity"]), "warning")
+	message := firstNonEmpty(stringValue(action["message"]), fmt.Sprintf("Rule matched: %s", stringValue(rule["name"])))
+	metadata := map[string]any{
+		"source":            "rules-engine",
+		"automationRuleId":  rule["id"],
+		"automationRule":    rule["name"],
+		"evaluationContext": evaluationContext,
+		"action":            action,
+	}
+
+	switch actionType {
+	case "create_alert":
+		title := firstNonEmpty(stringValue(action["title"]), stringValue(rule["name"]), "Rule matched")
+		alert, err := s.repo.QueryOne(ctx, `
+INSERT INTO system_alerts (severity, source, title, message, status, metadata)
+VALUES ($1, 'rules-engine', $2, $3, 'active', $4::jsonb)
+RETURNING id`,
+			severity,
+			title,
+			message,
+			mustJSON(metadata),
+		)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"alertId": alert["id"]}, nil
+	case "create_system_event":
+		eventType := firstNonEmpty(stringValue(action["eventType"]), "rule_matched")
+		event, err := s.repo.QueryOne(ctx, `
+INSERT INTO system_events (event_type, severity, source, message, metadata)
+VALUES ($1, $2, 'rules-engine', $3, $4::jsonb)
+RETURNING id`,
+			eventType,
+			severity,
+			message,
+			mustJSON(metadata),
+		)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"eventId": event["id"]}, nil
+	case "show_dashboard_suggestion":
+		return map[string]any{"suggestion": message}, nil
+	default:
+		return nil, fmt.Errorf("unsupported action type: %s", actionType)
+	}
+}
+
+func evaluateAutomationCondition(condition map[string]any, evaluationContext map[string]any) (bool, repositories.Record) {
+	if len(condition) == 0 {
+		return false, repositories.Record{"matched": false, "reason": "missing_condition"}
+	}
+	if rawAll, ok := condition["all"].([]any); ok {
+		children := make([]any, 0, len(rawAll))
+		for _, rawCondition := range rawAll {
+			matched, result := evaluateAutomationCondition(objectValue(rawCondition), evaluationContext)
+			children = append(children, result)
+			if !matched {
+				return false, repositories.Record{"matched": false, "operator": "all", "children": children}
+			}
+		}
+		return true, repositories.Record{"matched": true, "operator": "all", "children": children}
+	}
+	if rawAny, ok := condition["any"].([]any); ok {
+		children := make([]any, 0, len(rawAny))
+		for _, rawCondition := range rawAny {
+			matched, result := evaluateAutomationCondition(objectValue(rawCondition), evaluationContext)
+			children = append(children, result)
+			if matched {
+				return true, repositories.Record{"matched": true, "operator": "any", "children": children}
+			}
+		}
+		return false, repositories.Record{"matched": false, "operator": "any", "children": children}
+	}
+
+	fact := stringValue(condition["fact"])
+	operator := firstNonEmpty(stringValue(condition["operator"]), "eq")
+	expected := condition["value"]
+	actual, exists := lookupPath(evaluationContext, fact)
+	matched := compareCondition(operator, actual, expected, exists)
+
+	return matched, repositories.Record{
+		"matched":  matched,
+		"fact":     fact,
+		"operator": operator,
+		"expected": expected,
+		"actual":   actual,
+		"exists":   exists,
+	}
+}
+
+func compareCondition(operator string, actual any, expected any, exists bool) bool {
+	switch operator {
+	case "exists":
+		return exists
+	case "not_exists":
+		return !exists
+	case "eq":
+		return valuesEqual(actual, expected)
+	case "neq":
+		return !valuesEqual(actual, expected)
+	case "gt", "gte", "lt", "lte":
+		left, leftOK := floatValue(actual)
+		right, rightOK := floatValue(expected)
+		if !leftOK || !rightOK {
+			return false
+		}
+		switch operator {
+		case "gt":
+			return left > right
+		case "gte":
+			return left >= right
+		case "lt":
+			return left < right
+		default:
+			return left <= right
+		}
+	case "contains":
+		return containsValue(actual, expected)
+	default:
+		return false
+	}
+}
+
+func lookupPath(value map[string]any, path string) (any, bool) {
+	if path == "" {
+		return nil, false
+	}
+	var current any = value
+	for _, part := range strings.Split(path, ".") {
+		object, ok := current.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		current, ok = object[part]
+		if !ok {
+			return nil, false
+		}
+	}
+	return current, true
+}
+
+func valuesEqual(left any, right any) bool {
+	leftNumber, leftOK := floatValue(left)
+	rightNumber, rightOK := floatValue(right)
+	if leftOK && rightOK {
+		return leftNumber == rightNumber
+	}
+	return reflect.DeepEqual(left, right)
+}
+
+func containsValue(actual any, expected any) bool {
+	expectedText := fmt.Sprint(expected)
+	switch typed := actual.(type) {
+	case string:
+		return strings.Contains(typed, expectedText)
+	case []any:
+		for _, item := range typed {
+			if valuesEqual(item, expected) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func floatValue(value any) (float64, bool) {
+	switch typed := value.(type) {
+	case float64:
+		return typed, true
+	case float32:
+		return float64(typed), true
+	case int:
+		return float64(typed), true
+	case int32:
+		return float64(typed), true
+	case int64:
+		return float64(typed), true
+	case json.Number:
+		parsed, err := typed.Float64()
+		return parsed, err == nil
+	default:
+		return 0, false
+	}
+}
+
+func objectValue(value any) map[string]any {
+	object, ok := value.(map[string]any)
+	if ok && object != nil {
+		return object
+	}
+	return map[string]any{}
+}
+
+func isSafeRuleAction(actionType string) bool {
+	switch actionType {
+	case "create_alert", "create_system_event", "show_dashboard_suggestion":
+		return true
+	default:
+		return false
+	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func slugify(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	var builder strings.Builder
+	previousDash := false
+	for _, ch := range value {
+		if (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') {
+			builder.WriteRune(ch)
+			previousDash = false
+			continue
+		}
+		if !previousDash {
+			builder.WriteRune('-')
+			previousDash = true
+		}
+	}
+	return strings.Trim(builder.String(), "-")
+}
+
 func (s *DomainService) ListFirmwareVersions(ctx context.Context) ([]repositories.Record, error) {
 	return s.repo.Query(ctx, `SELECT * FROM firmware_versions ORDER BY created_at DESC`)
 }
@@ -844,7 +1551,19 @@ func (s *DomainService) GetFirmwareVersion(ctx context.Context, id string) (repo
 func (s *DomainService) CreateFirmwareVersion(ctx context.Context, body map[string]any) (repositories.Record, error) {
 	return s.repo.QueryOne(ctx, `
 INSERT INTO firmware_versions (device_type, version, channel_id, storage_path, checksum_sha256, size_bytes, metadata)
-VALUES ($1, $2, COALESCE($3::uuid, '00000000-0000-0000-0000-000000000103'::uuid), $4, $5, $6, $7::jsonb)
+VALUES (
+  $1,
+  $2,
+  COALESCE(
+    $3::uuid,
+    (SELECT id FROM firmware_channels WHERE is_default ORDER BY created_at DESC LIMIT 1),
+    '00000000-0000-0000-0000-000000000103'::uuid
+  ),
+  $4,
+  $5,
+  $6,
+  $7::jsonb
+)
 RETURNING *`,
 		stringField(body, "deviceType"),
 		stringField(body, "version"),
@@ -858,6 +1577,43 @@ RETURNING *`,
 
 func (s *DomainService) ListFirmwareChannels(ctx context.Context) ([]repositories.Record, error) {
 	return s.repo.Query(ctx, `SELECT * FROM firmware_channels ORDER BY name`)
+}
+
+func (s *DomainService) SetFirmwareChannelDefault(ctx context.Context, id string) (repositories.Record, error) {
+	var record repositories.Record
+	err := s.repo.WithTx(ctx, func(repo *repositories.Repository) error {
+		if _, err := repo.Exec(ctx, `UPDATE firmware_channels SET is_default = false`); err != nil {
+			return err
+		}
+		updated, err := repo.QueryOne(ctx, `
+UPDATE firmware_channels
+SET is_default = true
+WHERE id = $1::uuid
+RETURNING *`,
+			id,
+		)
+		if err != nil {
+			return err
+		}
+		record = updated
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	s.emitSystemEvent(ctx, systemEventInput{
+		EventType: "firmware_channel_default_changed",
+		Severity:  "info",
+		Source:    "api",
+		Message:   fmt.Sprintf("firmware channel %s set as default", id),
+		Metadata: map[string]any{
+			"firmwareChannelId": id,
+			"name":              record["name"],
+		},
+	})
+
+	return record, nil
 }
 
 func (s *DomainService) ListOtaJobs(ctx context.Context, deviceID string) ([]repositories.Record, error) {

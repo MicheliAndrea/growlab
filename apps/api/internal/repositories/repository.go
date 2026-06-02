@@ -20,6 +20,7 @@ type Record map[string]any
 
 type Repository struct {
 	pool *pgxpool.Pool
+	tx   pgx.Tx
 }
 
 func New(pool *pgxpool.Pool) *Repository {
@@ -27,7 +28,7 @@ func New(pool *pgxpool.Pool) *Repository {
 }
 
 func (r *Repository) Query(ctx context.Context, sql string, args ...any) ([]Record, error) {
-	rows, err := r.pool.Query(ctx, sql, args...)
+	rows, err := r.queryer().Query(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +38,7 @@ func (r *Repository) Query(ctx context.Context, sql string, args ...any) ([]Reco
 }
 
 func (r *Repository) QueryOne(ctx context.Context, sql string, args ...any) (Record, error) {
-	rows, err := r.pool.Query(ctx, sql, args...)
+	rows, err := r.queryer().Query(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +55,34 @@ func (r *Repository) QueryOne(ctx context.Context, sql string, args ...any) (Rec
 }
 
 func (r *Repository) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
-	return r.pool.Exec(ctx, sql, args...)
+	return r.queryer().Exec(ctx, sql, args...)
+}
+
+func (r *Repository) WithTx(ctx context.Context, fn func(*Repository) error) error {
+	if r.tx != nil {
+		return fn(r)
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	txRepo := &Repository{pool: r.pool, tx: tx}
+	if err := fn(txRepo); err != nil {
+		_ = tx.Rollback(ctx)
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *Repository) queryer() interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+} {
+	if r.tx != nil {
+		return r.tx
+	}
+	return r.pool
 }
 
 func scanRecords(rows pgx.Rows) ([]Record, error) {

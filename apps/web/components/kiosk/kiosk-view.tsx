@@ -2,7 +2,14 @@
 
 import * as React from "react";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Clock3, Cpu, RefreshCcw, Sprout } from "lucide-react";
+import {
+  AlertTriangle,
+  Clock3,
+  Cpu,
+  Gauge,
+  RefreshCcw,
+  Sprout,
+} from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -22,6 +29,7 @@ import {
 import {
   fetchDevices,
   fetchHealth,
+  fetchLatestSensorReadings,
   fetchPlantImages,
   fetchPlants,
   fetchSystemAlerts,
@@ -77,6 +85,11 @@ export function KioskView() {
     queryFn: fetchLightingSystems,
     refetchInterval: poll,
   });
+  const latestReadings = useQuery({
+    queryKey: queryKeys.latestSensorReadings(),
+    queryFn: () => fetchLatestSensorReadings(),
+    refetchInterval: 15_000,
+  });
   const imageQueries = useQueries({
     queries: (plants.data ?? []).slice(0, 8).map((plant) => ({
       queryKey: queryKeys.plantImages(plant.id),
@@ -125,7 +138,7 @@ export function KioskView() {
         </Button>
       </PageHeader>
 
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
         <MetricCard
           title="Time"
           value={now.toLocaleTimeString("en-GB", {
@@ -172,6 +185,15 @@ export function KioskView() {
           icon={AlertTriangle}
           tone={activeAlerts > 0 ? "destructive" : "success"}
         />
+        <MetricCard
+          title="Telemetry"
+          value={latestReadings.data?.length ?? 0}
+          detail="Live sensor points"
+          icon={Gauge}
+          tone={
+            (latestReadings.data?.length ?? 0) > 0 ? "success" : "secondary"
+          }
+        />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
@@ -208,6 +230,13 @@ export function KioskView() {
                 <StatusBadge value={activeAlerts > 0 ? "active" : "clear"} />
               }
             />
+            <Row
+              title="Telemetry"
+              detail="Latest sensor readings"
+              meta={
+                <StatusBadge value={`${latestReadings.data?.length ?? 0}`} />
+              }
+            />
           </RowList>
         </DataPanel>
 
@@ -227,6 +256,37 @@ export function KioskView() {
             </RowList>
           ) : !alerts.isLoading && !alerts.isError ? (
             <EmptyState title="No active alerts" />
+          ) : null}
+        </DataPanel>
+      </section>
+
+      <section className="grid gap-4">
+        <DataPanel
+          title="Live telemetry"
+          description="Latest reading per sensor."
+        >
+          {latestReadings.isLoading ? <DataNotice state="loading" /> : null}
+          {latestReadings.isError ? <DataNotice state="error" /> : null}
+          {latestReadings.data && latestReadings.data.length > 0 ? (
+            <RowList>
+              {latestReadings.data.slice(0, 10).map((reading) => (
+                <Row
+                  key={`${reading.sensorId}-${reading.recordedAt}`}
+                  title={`${reading.zoneName ?? "Unassigned"} / ${reading.sensorKey}`}
+                  detail={`${reading.deviceName} - ${formatDateTime(reading.recordedAt)}`}
+                  meta={
+                    <StatusBadge
+                      value={formatReadingValue(
+                        reading.valueDouble,
+                        reading.unit,
+                      )}
+                    />
+                  }
+                />
+              ))}
+            </RowList>
+          ) : !latestReadings.isLoading && !latestReadings.isError ? (
+            <EmptyState title="No sensor readings" />
           ) : null}
         </DataPanel>
       </section>
@@ -325,4 +385,9 @@ export function KioskView() {
       </section>
     </div>
   );
+}
+
+function formatReadingValue(value: number, unit: string) {
+  const formatted = Number.isFinite(value) ? value.toFixed(1) : String(value);
+  return `${formatted}${unit}`;
 }

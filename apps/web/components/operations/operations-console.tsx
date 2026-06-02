@@ -22,14 +22,22 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   acknowledgeSystemAlertEntry,
+  createAutomationRuleEntry,
   createSystemAlertEntry,
   createSystemEventEntry,
+  evaluateAutomationRuleEntry,
+  fetchAutomationRuleEvaluations,
+  fetchAutomationRules,
   fetchSystemAlerts,
   fetchSystemEvents,
   queryKeys,
   resolveSystemAlertEntry,
 } from "@/lib/queries";
 import {
+  type AutomationRule,
+  type AutomationRuleCreateRequest,
+  type AutomationRuleEvaluation,
+  type AutomationRuleEvaluationRequest,
   type SystemAlert,
   type SystemAlertCreateRequest,
   type SystemAlertTransitionRequest,
@@ -51,6 +59,7 @@ const severityOptions: SystemSeverity[] = [
 
 export function OperationsConsole() {
   const queryClient = useQueryClient();
+  const [selectedRuleId, setSelectedRuleId] = React.useState("");
   const activeAlerts = useQuery({
     queryKey: queryKeys.systemAlerts("active"),
     queryFn: () => fetchSystemAlerts("active"),
@@ -61,9 +70,24 @@ export function OperationsConsole() {
     queryFn: fetchSystemEvents,
     refetchInterval: poll,
   });
+  const rules = useQuery({
+    queryKey: queryKeys.automationRules,
+    queryFn: fetchAutomationRules,
+    refetchInterval: poll,
+  });
+  const activeRuleId = selectedRuleId || rules.data?.[0]?.id || "";
+  const ruleEvaluations = useQuery({
+    queryKey: activeRuleId
+      ? queryKeys.automationRuleEvaluations(activeRuleId)
+      : ["automation-rules", "none", "evaluations"],
+    queryFn: () => fetchAutomationRuleEvaluations(activeRuleId),
+    enabled: Boolean(activeRuleId),
+    refetchInterval: poll,
+  });
 
   const alertCount = activeAlerts.data?.length ?? 0;
   const eventCount = events.data?.length ?? 0;
+  const ruleCount = rules.data?.length ?? 0;
   const criticalCount =
     events.data?.filter((event) => event.severity === "critical").length ?? 0;
 
@@ -102,6 +126,34 @@ export function OperationsConsole() {
     },
   });
 
+  const createRuleMutation = useMutation({
+    mutationFn: (request: AutomationRuleCreateRequest) =>
+      createAutomationRuleEntry(request),
+    onSuccess: async (rule) => {
+      setSelectedRuleId(rule.id);
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.automationRules,
+      });
+    },
+  });
+
+  const evaluateRuleMutation = useMutation({
+    mutationFn: (input: {
+      ruleId: string;
+      request: AutomationRuleEvaluationRequest;
+    }) => evaluateAutomationRuleEntry(input.ruleId, input.request),
+    onSuccess: async (_evaluation, input) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.automationRules,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.automationRuleEvaluations(input.ruleId),
+      });
+      await queryClient.invalidateQueries({ queryKey: ["system-alerts"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.systemEvents });
+    },
+  });
+
   return (
     <div className="grid gap-6">
       <PageHeader
@@ -119,7 +171,7 @@ export function OperationsConsole() {
         </Button>
       </PageHeader>
 
-      <section className="grid gap-3 md:grid-cols-3">
+      <section className="grid gap-3 md:grid-cols-4">
         <MetricCard
           title="Active alerts"
           value={alertCount}
@@ -140,6 +192,13 @@ export function OperationsConsole() {
           icon={CheckCircle2}
           tone={criticalCount > 0 ? "warning" : "success"}
         />
+        <MetricCard
+          title="Rules"
+          value={ruleCount}
+          detail="Manual dry-run rules"
+          icon={CheckCircle2}
+          tone={ruleCount > 0 ? "success" : "secondary"}
+        />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
@@ -156,6 +215,32 @@ export function OperationsConsole() {
             onSubmit={createEventMutation.mutate}
             isPending={createEventMutation.isPending}
             error={createEventMutation.error}
+          />
+        </DataPanel>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+        <DataPanel title="Create rule" description="Safe manual rule MVP.">
+          <AutomationRuleForm
+            onSubmit={createRuleMutation.mutate}
+            isPending={createRuleMutation.isPending}
+            error={createRuleMutation.error}
+          />
+        </DataPanel>
+
+        <DataPanel title="Evaluate rule" description="Dry-run by default.">
+          <AutomationRuleRunner
+            rules={rules.data ?? []}
+            evaluations={ruleEvaluations.data ?? []}
+            selectedRuleId={activeRuleId}
+            onSelectedRuleIdChange={setSelectedRuleId}
+            onEvaluate={(ruleId, request) =>
+              evaluateRuleMutation.mutate({ ruleId, request })
+            }
+            isLoading={rules.isLoading || ruleEvaluations.isLoading}
+            isError={rules.isError || ruleEvaluations.isError}
+            isPending={evaluateRuleMutation.isPending}
+            error={evaluateRuleMutation.error}
           />
         </DataPanel>
       </section>
@@ -547,6 +632,387 @@ function SystemEventForm({
   );
 }
 
+const defaultRuleCondition = JSON.stringify(
+  {
+    fact: "soilMoisture",
+    operator: "lt",
+    value: 35,
+  },
+  null,
+  2,
+);
+
+const defaultRuleActions = JSON.stringify(
+  {
+    actions: [
+      {
+        type: "show_dashboard_suggestion",
+        message: "Check substrate moisture manually.",
+      },
+      {
+        type: "create_system_event",
+        eventType: "rule_matched",
+        severity: "warning",
+        message: "Manual rule matched.",
+      },
+    ],
+  },
+  null,
+  2,
+);
+
+const defaultEvaluationContext = JSON.stringify(
+  {
+    temperature: 24.5,
+    humidity: 58,
+    soilMoisture: 28,
+    device: {
+      status: "online",
+    },
+  },
+  null,
+  2,
+);
+
+function AutomationRuleForm({
+  onSubmit,
+  isPending,
+  error,
+}: {
+  onSubmit: (request: AutomationRuleCreateRequest) => void;
+  isPending: boolean;
+  error: unknown;
+}) {
+  const [name, setName] = React.useState("");
+  const [slug, setSlug] = React.useState("");
+  const [description, setDescription] = React.useState("");
+  const [enabled, setEnabled] = React.useState(true);
+  const [severity, setSeverity] = React.useState<SystemSeverity>("warning");
+  const [conditionConfig, setConditionConfig] =
+    React.useState(defaultRuleCondition);
+  const [actionConfig, setActionConfig] = React.useState(defaultRuleActions);
+  const [metadata, setMetadata] = React.useState("{}");
+  const [formError, setFormError] = React.useState<string | null>(null);
+
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setFormError("Name is required.");
+      return;
+    }
+
+    try {
+      const request: AutomationRuleCreateRequest = {
+        name: trimmedName,
+        slug: slug.trim() || undefined,
+        description: description.trim() || null,
+        enabled,
+        severity,
+        conditionConfig:
+          parseJsonObject(conditionConfig, "condition config") ?? {},
+        actionConfig: parseJsonObject(actionConfig, "action config") ?? {},
+        metadata: parseJsonObject(metadata, "metadata") ?? {},
+      };
+
+      setFormError(null);
+      onSubmit(request);
+      setName("");
+      setSlug("");
+      setDescription("");
+      setEnabled(true);
+      setSeverity("warning");
+      setConditionConfig(defaultRuleCondition);
+      setActionConfig(defaultRuleActions);
+      setMetadata("{}");
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Invalid payload");
+    }
+  }
+
+  return (
+    <form className="grid gap-4" onSubmit={handleSubmit}>
+      {formError ? (
+        <p className="text-xs text-red-600 dark:text-red-300">{formError}</p>
+      ) : null}
+      {error instanceof Error ? (
+        <p className="text-xs text-red-600 dark:text-red-300">
+          {error.message}
+        </p>
+      ) : null}
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <div>
+          <Label htmlFor="rule-name">Name</Label>
+          <Input
+            id="rule-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            className="mt-2"
+          />
+        </div>
+        <div>
+          <Label htmlFor="rule-slug">Slug</Label>
+          <Input
+            id="rule-slug"
+            value={slug}
+            onChange={(event) => setSlug(event.target.value)}
+            className="mt-2"
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+        <div>
+          <Label htmlFor="rule-severity">Severity</Label>
+          <select
+            id="rule-severity"
+            className={selectClass}
+            value={severity}
+            onChange={(event) =>
+              setSeverity(event.target.value as SystemSeverity)
+            }
+          >
+            {severityOptions.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </div>
+        <label className="flex h-9 items-center gap-2 text-sm">
+          <input
+            checked={enabled}
+            onChange={(event) => setEnabled(event.target.checked)}
+            type="checkbox"
+          />
+          Enabled
+        </label>
+      </div>
+
+      <div>
+        <Label htmlFor="rule-description">Description</Label>
+        <Textarea
+          id="rule-description"
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          className="mt-2 min-h-20"
+        />
+      </div>
+
+      <div className="grid gap-3 xl:grid-cols-2">
+        <div>
+          <Label htmlFor="rule-condition">Condition config</Label>
+          <Textarea
+            id="rule-condition"
+            value={conditionConfig}
+            onChange={(event) => setConditionConfig(event.target.value)}
+            className="mt-2 min-h-40 font-mono text-xs"
+          />
+        </div>
+        <div>
+          <Label htmlFor="rule-actions">Action config</Label>
+          <Textarea
+            id="rule-actions"
+            value={actionConfig}
+            onChange={(event) => setActionConfig(event.target.value)}
+            className="mt-2 min-h-40 font-mono text-xs"
+          />
+        </div>
+      </div>
+
+      <div>
+        <Label htmlFor="rule-metadata">Metadata</Label>
+        <Textarea
+          id="rule-metadata"
+          value={metadata}
+          onChange={(event) => setMetadata(event.target.value)}
+          className="mt-2 min-h-20 font-mono text-xs"
+        />
+      </div>
+
+      <Button disabled={isPending} type="submit">
+        <PlusCircle className="h-4 w-4" aria-hidden="true" />
+        Create rule
+      </Button>
+    </form>
+  );
+}
+
+function AutomationRuleRunner({
+  rules,
+  evaluations,
+  selectedRuleId,
+  onSelectedRuleIdChange,
+  onEvaluate,
+  isLoading,
+  isError,
+  isPending,
+  error,
+}: {
+  rules: AutomationRule[];
+  evaluations: AutomationRuleEvaluation[];
+  selectedRuleId: string;
+  onSelectedRuleIdChange: (id: string) => void;
+  onEvaluate: (
+    ruleId: string,
+    request: AutomationRuleEvaluationRequest,
+  ) => void;
+  isLoading: boolean;
+  isError: boolean;
+  isPending: boolean;
+  error: unknown;
+}) {
+  const [evaluationContext, setEvaluationContext] = React.useState(
+    defaultEvaluationContext,
+  );
+  const [commit, setCommit] = React.useState(false);
+  const [formError, setFormError] = React.useState<string | null>(null);
+  const selectedRule = rules.find((rule) => rule.id === selectedRuleId);
+
+  function handleEvaluate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedRuleId) {
+      setFormError("Select a rule before evaluation.");
+      return;
+    }
+
+    try {
+      const request: AutomationRuleEvaluationRequest = {
+        evaluationContext:
+          parseJsonObject(evaluationContext, "evaluation context") ?? {},
+        commit,
+        evaluatedBy: "web-operations",
+      };
+      setFormError(null);
+      onEvaluate(selectedRuleId, request);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Invalid payload");
+    }
+  }
+
+  if (isLoading) {
+    return <DataNotice state="loading" />;
+  }
+
+  if (isError) {
+    return <DataNotice state="error" />;
+  }
+
+  if (rules.length === 0) {
+    return (
+      <EmptyState
+        title="No rules"
+        detail="Create the first rule before running evaluations."
+      />
+    );
+  }
+
+  return (
+    <div className="grid gap-4">
+      <form className="grid gap-4" onSubmit={handleEvaluate}>
+        {formError ? (
+          <p className="text-xs text-red-600 dark:text-red-300">{formError}</p>
+        ) : null}
+        {error instanceof Error ? (
+          <p className="text-xs text-red-600 dark:text-red-300">
+            {error.message}
+          </p>
+        ) : null}
+
+        <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+          <div>
+            <Label htmlFor="rule-select">Rule</Label>
+            <select
+              id="rule-select"
+              className={selectClass}
+              value={selectedRuleId}
+              onChange={(event) => onSelectedRuleIdChange(event.target.value)}
+            >
+              {rules.map((rule) => (
+                <option key={rule.id} value={rule.id}>
+                  {rule.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <label className="flex h-9 items-center gap-2 text-sm">
+            <input
+              checked={commit}
+              onChange={(event) => setCommit(event.target.checked)}
+              type="checkbox"
+            />
+            Commit safe actions
+          </label>
+        </div>
+
+        <div className="grid gap-2 rounded-md border border-border bg-muted/30 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium">
+              {selectedRule?.name ?? "Rule"}
+            </span>
+            <SeverityBadge value={selectedRule?.severity} />
+            <StatusBadge value={selectedRule?.enabled ? "active" : "offline"} />
+          </div>
+          <div className="truncate text-xs text-muted-foreground">
+            {selectedRule?.description ?? selectedRule?.slug}
+          </div>
+        </div>
+
+        <div>
+          <Label htmlFor="rule-evaluation-context">Evaluation context</Label>
+          <Textarea
+            id="rule-evaluation-context"
+            value={evaluationContext}
+            onChange={(event) => setEvaluationContext(event.target.value)}
+            className="mt-2 min-h-36 font-mono text-xs"
+          />
+        </div>
+
+        <Button disabled={isPending} type="submit" variant="outline">
+          <RefreshCcw className="h-4 w-4" aria-hidden="true" />
+          Evaluate rule
+        </Button>
+      </form>
+
+      <div className="grid gap-3">
+        <div className="text-sm font-medium">Evaluation history</div>
+        {evaluations.length > 0 ? (
+          <RowList>
+            {evaluations.slice(0, 6).map((evaluation) => (
+              <EvaluationRow key={evaluation.id} evaluation={evaluation} />
+            ))}
+          </RowList>
+        ) : (
+          <EmptyState
+            title="No evaluations"
+            detail="Manual evaluation results will appear here."
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EvaluationRow({
+  evaluation,
+}: {
+  evaluation: AutomationRuleEvaluation;
+}) {
+  return (
+    <Row
+      title={evaluation.matched ? "matched" : "not matched"}
+      detail={`${evaluation.mode} - ${formatDateTime(evaluation.evaluatedAt)}`}
+      meta={<StatusBadge value={evaluation.matched ? "active" : "clear"} />}
+    >
+      <div className="max-w-full truncate text-xs text-muted-foreground">
+        {summary(evaluation.actions)}
+      </div>
+    </Row>
+  );
+}
+
 function parseJsonObject(value: string, label: string) {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -559,4 +1025,16 @@ function parseJsonObject(value: string, label: string) {
   }
 
   return parsed as Record<string, unknown>;
+}
+
+function summary(value: unknown) {
+  if (value == null) {
+    return "not set";
+  }
+  try {
+    const text = JSON.stringify(value);
+    return text.length > 88 ? `${text.slice(0, 85)}...` : text;
+  } catch {
+    return "not set";
+  }
 }

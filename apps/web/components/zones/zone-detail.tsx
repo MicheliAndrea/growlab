@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { RefreshCcw } from "lucide-react";
 
@@ -19,6 +19,7 @@ import { ZoneProfileForm } from "@/components/zones/zone-profile-form";
 import { ZoneLayoutEditor } from "@/components/zones/zone-layout-editor";
 import { ZoneLayoutPreview } from "@/components/zones/zone-layout-preview";
 import {
+  activateZoneProfileEntry,
   fetchPlantsByZone,
   fetchZone,
   fetchZoneProfiles,
@@ -43,6 +44,15 @@ export function ZoneDetail({ zoneId }: { zoneId: string }) {
     queryKey: queryKeys.plantsByZone(zoneId),
     queryFn: () => fetchPlantsByZone(zoneId),
     refetchInterval: poll,
+  });
+  const activateProfileMutation = useMutation({
+    mutationFn: (profileId: string) =>
+      activateZoneProfileEntry(zoneId, profileId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.zoneProfiles(zoneId),
+      });
+    },
   });
 
   return (
@@ -160,6 +170,11 @@ export function ZoneDetail({ zoneId }: { zoneId: string }) {
 
           {profiles.isLoading ? <DataNotice state="loading" /> : null}
           {profiles.isError ? <DataNotice state="error" /> : null}
+          {activateProfileMutation.error ? (
+            <p className="text-xs text-red-600 dark:text-red-300">
+              {activateProfileMutation.error.message}
+            </p>
+          ) : null}
           {profiles.data && profiles.data.length > 0 ? (
             <RowList>
               {profiles.data.map((profile) => (
@@ -172,7 +187,18 @@ export function ZoneDetail({ zoneId }: { zoneId: string }) {
                       value={profile.isActive ? "active" : "inactive"}
                     />
                   }
-                />
+                >
+                  {!profile.isActive ? (
+                    <Button
+                      disabled={activateProfileMutation.isPending}
+                      onClick={() => activateProfileMutation.mutate(profile.id)}
+                      size="sm"
+                      variant="outline"
+                    >
+                      Activate
+                    </Button>
+                  ) : null}
+                </Row>
               ))}
             </RowList>
           ) : !profiles.isLoading && !profiles.isError ? (

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"growlab/apps/api/internal/config"
+	"growlab/apps/api/internal/handlers"
 	"growlab/apps/api/internal/metrics"
 )
 
@@ -38,5 +39,17 @@ func TestMetricsRoute(t *testing.T) {
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
+	}
+}
+
+func TestDomainRoutesRegister(t *testing.T) {
+	router := NewRouter(RouterOptions{
+		Config:        config.Load(),
+		DomainHandler: handlers.NewDomainHandler(nil, handlers.DomainHandlerOptions{}),
+	})
+
+	routes := router.Routes()
+	if len(routes) == 0 {
+		t.Fatal("expected registered routes")
 	}
 }

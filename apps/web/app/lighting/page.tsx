@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Clock3, Lightbulb, RefreshCcw } from "lucide-react";
 
 import { LightingControlCard } from "@/components/lighting/lighting-control-card";
@@ -17,6 +17,7 @@ import {
   StatusBadge,
 } from "@/components/dashboard/ui";
 import {
+  activateLightingProfileDefaultEntry,
   fetchLightingProfiles,
   fetchLightingSystems,
   fetchZones,
@@ -41,6 +42,18 @@ export default function LightingPage() {
     queryKey: queryKeys.lightingProfiles(),
     queryFn: () => fetchLightingProfiles(),
     refetchInterval: poll,
+  });
+  const activateDefaultMutation = useMutation({
+    mutationFn: (profileId: string) =>
+      activateLightingProfileDefaultEntry(profileId),
+    onSuccess: async (profile) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.lightingProfiles(),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.lightingProfiles(profile.zoneId),
+      });
+    },
   });
   const enabledSystems =
     systems.data?.filter((system) => system.enabled).length ?? 0;
@@ -137,6 +150,11 @@ export default function LightingPage() {
         <DataPanel title="Profiles" description="Zone lighting schedules.">
           {profiles.isLoading ? <DataNotice state="loading" /> : null}
           {profiles.isError ? <DataNotice state="error" /> : null}
+          {activateDefaultMutation.error ? (
+            <p className="text-xs text-red-600 dark:text-red-300">
+              {activateDefaultMutation.error.message}
+            </p>
+          ) : null}
           {profiles.data && profiles.data.length > 0 ? (
             <RowList>
               {profiles.data.map((profile) => (
@@ -153,6 +171,16 @@ export default function LightingPage() {
                   <StatusBadge
                     value={profile.isDefault ? "default" : "custom"}
                   />
+                  {!profile.isDefault ? (
+                    <Button
+                      disabled={activateDefaultMutation.isPending}
+                      onClick={() => activateDefaultMutation.mutate(profile.id)}
+                      size="sm"
+                      variant="outline"
+                    >
+                      Set default
+                    </Button>
+                  ) : null}
                 </Row>
               ))}
             </RowList>

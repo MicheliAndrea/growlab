@@ -61,11 +61,13 @@ func NewDomainHandler(service *services.DomainService, opts DomainHandlerOptions
 }
 
 func (h *DomainHandler) ListZones(c *gin.Context) {
-	respond(c, h.service.ListZones(c.Request.Context()))
+	result, err := h.service.ListZones(c.Request.Context())
+	respond(c, result, err)
 }
 
 func (h *DomainHandler) GetZone(c *gin.Context) {
-	respondOne(c, h.service.GetZone(c.Request.Context(), c.Param("id")))
+	result, err := h.service.GetZone(c.Request.Context(), c.Param("id"))
+	respondOne(c, result, err)
 }
 
 func (h *DomainHandler) CreateZone(c *gin.Context) {
@@ -73,7 +75,8 @@ func (h *DomainHandler) CreateZone(c *gin.Context) {
 	if !ok {
 		return
 	}
-	respondCreated(c, h.service.CreateZone(c.Request.Context(), body))
+	result, err := h.service.CreateZone(c.Request.Context(), body)
+	respondCreated(c, result, err)
 }
 
 func (h *DomainHandler) UpdateZone(c *gin.Context) {
@@ -81,7 +84,8 @@ func (h *DomainHandler) UpdateZone(c *gin.Context) {
 	if !ok {
 		return
 	}
-	respondOne(c, h.service.UpdateZone(c.Request.Context(), c.Param("id"), body))
+	result, err := h.service.UpdateZone(c.Request.Context(), c.Param("id"), body)
+	respondOne(c, result, err)
 }
 
 func (h *DomainHandler) DeleteZone(c *gin.Context) {
@@ -89,7 +93,8 @@ func (h *DomainHandler) DeleteZone(c *gin.Context) {
 }
 
 func (h *DomainHandler) ListZoneProfiles(c *gin.Context) {
-	respond(c, h.service.ListZoneProfiles(c.Request.Context(), c.Param("id")))
+	result, err := h.service.ListZoneProfiles(c.Request.Context(), c.Param("id"))
+	respond(c, result, err)
 }
 
 func (h *DomainHandler) CreateZoneProfile(c *gin.Context) {
@@ -97,15 +102,23 @@ func (h *DomainHandler) CreateZoneProfile(c *gin.Context) {
 	if !ok {
 		return
 	}
-	respondCreated(c, h.service.CreateZoneProfile(c.Request.Context(), c.Param("id"), body))
+	result, err := h.service.CreateZoneProfile(c.Request.Context(), c.Param("id"), body)
+	respondCreated(c, result, err)
+}
+
+func (h *DomainHandler) ActivateZoneProfile(c *gin.Context) {
+	result, err := h.service.ActivateZoneProfile(c.Request.Context(), c.Param("id"), c.Param("profileId"))
+	respondOne(c, result, err)
 }
 
 func (h *DomainHandler) ListPlants(c *gin.Context) {
-	respond(c, h.service.ListPlants(c.Request.Context(), c.Query("zoneId")))
+	result, err := h.service.ListPlants(c.Request.Context(), c.Query("zoneId"))
+	respond(c, result, err)
 }
 
 func (h *DomainHandler) GetPlant(c *gin.Context) {
-	respondOne(c, h.service.GetPlant(c.Request.Context(), c.Param("id")))
+	result, err := h.service.GetPlant(c.Request.Context(), c.Param("id"))
+	respondOne(c, result, err)
 }
 
 func (h *DomainHandler) CreatePlant(c *gin.Context) {
@@ -113,7 +126,8 @@ func (h *DomainHandler) CreatePlant(c *gin.Context) {
 	if !ok {
 		return
 	}
-	respondCreated(c, h.service.CreatePlant(c.Request.Context(), body))
+	result, err := h.service.CreatePlant(c.Request.Context(), body)
+	respondCreated(c, result, err)
 }
 
 func (h *DomainHandler) UpdatePlant(c *gin.Context) {
@@ -121,7 +135,8 @@ func (h *DomainHandler) UpdatePlant(c *gin.Context) {
 	if !ok {
 		return
 	}
-	respondOne(c, h.service.UpdatePlant(c.Request.Context(), c.Param("id"), body))
+	result, err := h.service.UpdatePlant(c.Request.Context(), c.Param("id"), body)
+	respondOne(c, result, err)
 }
 
 func (h *DomainHandler) DeletePlant(c *gin.Context) {
@@ -129,15 +144,18 @@ func (h *DomainHandler) DeletePlant(c *gin.Context) {
 }
 
 func (h *DomainHandler) GetPlantTimeline(c *gin.Context) {
-	respond(c, h.service.GetPlantTimeline(c.Request.Context(), c.Param("id")))
+	result, err := h.service.GetPlantTimeline(c.Request.Context(), c.Param("id"))
+	respond(c, result, err)
 }
 
 func (h *DomainHandler) ListPlantImages(c *gin.Context) {
-	respond(c, h.service.ListPlantImages(c.Request.Context(), c.Param("id")))
+	result, err := h.service.ListPlantImages(c.Request.Context(), c.Param("id"))
+	respond(c, result, err)
 }
 
 func (h *DomainHandler) ListPlantEvents(c *gin.Context) {
-	respond(c, h.service.ListPlantEvents(c.Request.Context(), c.Param("id")))
+	result, err := h.service.ListPlantEvents(c.Request.Context(), c.Param("id"))
+	respond(c, result, err)
 }
 
 func (h *DomainHandler) CreatePlantEvent(c *gin.Context) {
@@ -145,7 +163,8 @@ func (h *DomainHandler) CreatePlantEvent(c *gin.Context) {
 	if !ok {
 		return
 	}
-	respondCreated(c, h.service.CreatePlantEvent(c.Request.Context(), c.Param("id"), body))
+	result, err := h.service.CreatePlantEvent(c.Request.Context(), c.Param("id"), body)
+	respondCreated(c, result, err)
 }
 
 func (h *DomainHandler) CreatePlantImage(c *gin.Context) {
@@ -187,8 +206,18 @@ func (h *DomainHandler) ServePlantImage(c *gin.Context) {
 	c.File(fullPath)
 }
 
+func (h *DomainHandler) UpdatePlantImage(c *gin.Context) {
+	body, ok := bindJSONMap(c)
+	if !ok {
+		return
+	}
+	result, err := h.service.UpdatePlantImageMetadata(c.Request.Context(), c.Param("id"), body)
+	respondOne(c, result, err)
+}
+
 func (h *DomainHandler) ListPlantTasks(c *gin.Context) {
-	respond(c, h.service.ListPlantTasks(c.Request.Context(), c.Param("id")))
+	result, err := h.service.ListPlantTasks(c.Request.Context(), c.Param("id"))
+	respond(c, result, err)
 }
 
 func (h *DomainHandler) CreatePlantTask(c *gin.Context) {
@@ -196,11 +225,22 @@ func (h *DomainHandler) CreatePlantTask(c *gin.Context) {
 	if !ok {
 		return
 	}
-	respondCreated(c, h.service.CreatePlantTask(c.Request.Context(), c.Param("id"), body))
+	result, err := h.service.CreatePlantTask(c.Request.Context(), c.Param("id"), body)
+	respondCreated(c, result, err)
+}
+
+func (h *DomainHandler) UpdatePlantTask(c *gin.Context) {
+	body, ok := bindJSONMap(c)
+	if !ok {
+		return
+	}
+	result, err := h.service.UpdatePlantTask(c.Request.Context(), c.Param("id"), c.Param("taskId"), body)
+	respondOne(c, result, err)
 }
 
 func (h *DomainHandler) ListSystemEvents(c *gin.Context) {
-	respond(c, h.service.ListSystemEvents(c.Request.Context()))
+	result, err := h.service.ListSystemEvents(c.Request.Context())
+	respond(c, result, err)
 }
 
 func (h *DomainHandler) CreateSystemEvent(c *gin.Context) {
@@ -208,11 +248,13 @@ func (h *DomainHandler) CreateSystemEvent(c *gin.Context) {
 	if !ok {
 		return
 	}
-	respondCreated(c, h.service.CreateSystemEvent(c.Request.Context(), body))
+	result, err := h.service.CreateSystemEvent(c.Request.Context(), body)
+	respondCreated(c, result, err)
 }
 
 func (h *DomainHandler) ListSystemAlerts(c *gin.Context) {
-	respond(c, h.service.ListSystemAlerts(c.Request.Context(), c.Query("status")))
+	result, err := h.service.ListSystemAlerts(c.Request.Context(), c.Query("status"))
+	respond(c, result, err)
 }
 
 func (h *DomainHandler) CreateSystemAlert(c *gin.Context) {
@@ -220,7 +262,8 @@ func (h *DomainHandler) CreateSystemAlert(c *gin.Context) {
 	if !ok {
 		return
 	}
-	respondCreated(c, h.service.CreateSystemAlert(c.Request.Context(), body))
+	result, err := h.service.CreateSystemAlert(c.Request.Context(), body)
+	respondCreated(c, result, err)
 }
 
 func (h *DomainHandler) AcknowledgeSystemAlert(c *gin.Context) {
@@ -228,7 +271,8 @@ func (h *DomainHandler) AcknowledgeSystemAlert(c *gin.Context) {
 	if !ok {
 		return
 	}
-	respondOne(c, h.service.UpdateSystemAlertStatus(c.Request.Context(), c.Param("id"), "acknowledged", body))
+	result, err := h.service.UpdateSystemAlertStatus(c.Request.Context(), c.Param("id"), "acknowledged", body)
+	respondOne(c, result, err)
 }
 
 func (h *DomainHandler) ResolveSystemAlert(c *gin.Context) {
@@ -236,23 +280,74 @@ func (h *DomainHandler) ResolveSystemAlert(c *gin.Context) {
 	if !ok {
 		return
 	}
-	respondOne(c, h.service.UpdateSystemAlertStatus(c.Request.Context(), c.Param("id"), "resolved", body))
+	result, err := h.service.UpdateSystemAlertStatus(c.Request.Context(), c.Param("id"), "resolved", body)
+	respondOne(c, result, err)
+}
+
+func (h *DomainHandler) ListAutomationRules(c *gin.Context) {
+	result, err := h.service.ListAutomationRules(c.Request.Context())
+	respond(c, result, err)
+}
+
+func (h *DomainHandler) CreateAutomationRule(c *gin.Context) {
+	body, ok := bindJSONMap(c)
+	if !ok {
+		return
+	}
+	result, err := h.service.CreateAutomationRule(c.Request.Context(), body)
+	respondCreated(c, result, err)
+}
+
+func (h *DomainHandler) ListAutomationRuleEvaluations(c *gin.Context) {
+	result, err := h.service.ListAutomationRuleEvaluations(c.Request.Context(), c.Param("id"))
+	respond(c, result, err)
+}
+
+func (h *DomainHandler) EvaluateAutomationRule(c *gin.Context) {
+	body, ok := bindOptionalJSONMap(c)
+	if !ok {
+		return
+	}
+	result, err := h.service.EvaluateAutomationRule(c.Request.Context(), c.Param("id"), body)
+	respondCreated(c, result, err)
 }
 
 func (h *DomainHandler) ListDevices(c *gin.Context) {
-	respond(c, h.service.ListDevices(c.Request.Context()))
+	result, err := h.service.ListDevices(c.Request.Context())
+	respond(c, result, err)
 }
 
 func (h *DomainHandler) GetDevice(c *gin.Context) {
-	respondOne(c, h.service.GetDevice(c.Request.Context(), c.Param("id")))
+	result, err := h.service.GetDevice(c.Request.Context(), c.Param("id"))
+	respondOne(c, result, err)
 }
 
 func (h *DomainHandler) ListDeviceCapabilities(c *gin.Context) {
-	respond(c, h.service.ListDeviceCapabilities(c.Request.Context(), c.Param("id")))
+	result, err := h.service.ListDeviceCapabilities(c.Request.Context(), c.Param("id"))
+	respond(c, result, err)
+}
+
+func (h *DomainHandler) CreateDeviceCapability(c *gin.Context) {
+	body, ok := bindJSONMap(c)
+	if !ok {
+		return
+	}
+	result, err := h.service.CreateDeviceCapability(c.Request.Context(), c.Param("id"), body)
+	respondCreated(c, result, err)
+}
+
+func (h *DomainHandler) UpdateDeviceCapability(c *gin.Context) {
+	body, ok := bindJSONMap(c)
+	if !ok {
+		return
+	}
+	result, err := h.service.UpdateDeviceCapability(c.Request.Context(), c.Param("id"), c.Param("capabilityId"), body)
+	respondOne(c, result, err)
 }
 
 func (h *DomainHandler) GetDeviceProvisioning(c *gin.Context) {
-	respondOne(c, h.service.GetDeviceProvisioning(c.Request.Context(), c.Param("id")))
+	result, err := h.service.GetDeviceProvisioning(c.Request.Context(), c.Param("id"))
+	respondOne(c, result, err)
 }
 
 func (h *DomainHandler) CreateDeviceProvisioning(c *gin.Context) {
@@ -260,7 +355,17 @@ func (h *DomainHandler) CreateDeviceProvisioning(c *gin.Context) {
 	if !ok {
 		return
 	}
-	respondCreated(c, h.service.CreateDeviceProvisioning(c.Request.Context(), c.Param("id"), body))
+	result, err := h.service.CreateDeviceProvisioning(c.Request.Context(), c.Param("id"), body)
+	respondCreated(c, result, err)
+}
+
+func (h *DomainHandler) UpdateDeviceProvisioning(c *gin.Context) {
+	body, ok := bindJSONMap(c)
+	if !ok {
+		return
+	}
+	result, err := h.service.UpdateDeviceProvisioning(c.Request.Context(), c.Param("id"), c.Param("provisioningId"), body)
+	respondOne(c, result, err)
 }
 
 func (h *DomainHandler) ClaimDeviceProvisioning(c *gin.Context) {
@@ -273,11 +378,23 @@ func (h *DomainHandler) ClaimDeviceProvisioning(c *gin.Context) {
 		JSONError(c, http.StatusBadRequest, "INVALID_REQUEST", "token is required")
 		return
 	}
-	respondOne(c, h.service.ClaimDeviceProvisioning(c.Request.Context(), token))
+	result, err := h.service.ClaimDeviceProvisioning(c.Request.Context(), token)
+	respondOne(c, result, err)
 }
 
 func (h *DomainHandler) ListSensorCalibrations(c *gin.Context) {
-	respond(c, h.service.ListSensorCalibrations(c.Request.Context(), c.Param("id")))
+	result, err := h.service.ListSensorCalibrations(c.Request.Context(), c.Param("id"))
+	respond(c, result, err)
+}
+
+func (h *DomainHandler) ListLatestSensorReadings(c *gin.Context) {
+	result, err := h.service.ListLatestSensorReadings(c.Request.Context(), c.Query("zoneId"))
+	respond(c, result, err)
+}
+
+func (h *DomainHandler) ListSensorReadings(c *gin.Context) {
+	result, err := h.service.ListSensorReadings(c.Request.Context(), c.Param("id"), c.Query("hours"), c.Query("limit"))
+	respond(c, result, err)
 }
 
 func (h *DomainHandler) CreateSensorCalibration(c *gin.Context) {
@@ -285,15 +402,27 @@ func (h *DomainHandler) CreateSensorCalibration(c *gin.Context) {
 	if !ok {
 		return
 	}
-	respondCreated(c, h.service.CreateSensorCalibration(c.Request.Context(), c.Param("id"), body))
+	result, err := h.service.CreateSensorCalibration(c.Request.Context(), c.Param("id"), body)
+	respondCreated(c, result, err)
+}
+
+func (h *DomainHandler) UpdateSensorCalibration(c *gin.Context) {
+	body, ok := bindJSONMap(c)
+	if !ok {
+		return
+	}
+	result, err := h.service.UpdateSensorCalibration(c.Request.Context(), c.Param("id"), c.Param("calibrationId"), body)
+	respondOne(c, result, err)
 }
 
 func (h *DomainHandler) ListLightingSystems(c *gin.Context) {
-	respond(c, h.service.ListLightingSystems(c.Request.Context()))
+	result, err := h.service.ListLightingSystems(c.Request.Context())
+	respond(c, result, err)
 }
 
 func (h *DomainHandler) ListLightingProfiles(c *gin.Context) {
-	respond(c, h.service.ListLightingProfiles(c.Request.Context(), c.Query("zoneId")))
+	result, err := h.service.ListLightingProfiles(c.Request.Context(), c.Query("zoneId"))
+	respond(c, result, err)
 }
 
 func (h *DomainHandler) CreateLightingProfile(c *gin.Context) {
@@ -301,23 +430,33 @@ func (h *DomainHandler) CreateLightingProfile(c *gin.Context) {
 	if !ok {
 		return
 	}
-	respondCreated(c, h.service.CreateLightingProfile(c.Request.Context(), body))
+	result, err := h.service.CreateLightingProfile(c.Request.Context(), body)
+	respondCreated(c, result, err)
+}
+
+func (h *DomainHandler) ActivateLightingProfileDefault(c *gin.Context) {
+	result, err := h.service.ActivateLightingProfileDefault(c.Request.Context(), c.Param("id"))
+	respondOne(c, result, err)
 }
 
 func (h *DomainHandler) GetLightingState(c *gin.Context) {
-	respondOne(c, h.service.GetLightingState(c.Request.Context(), c.Param("id")))
+	result, err := h.service.GetLightingState(c.Request.Context(), c.Param("id"))
+	respondOne(c, result, err)
 }
 
 func (h *DomainHandler) ListLightingEvents(c *gin.Context) {
-	respond(c, h.service.ListLightingEvents(c.Request.Context(), c.Param("id")))
+	result, err := h.service.ListLightingEvents(c.Request.Context(), c.Param("id"))
+	respond(c, result, err)
 }
 
 func (h *DomainHandler) TurnLightingOn(c *gin.Context) {
-	respondOne(c, h.service.LightingCommand(c.Request.Context(), c.Param("id"), "on", map[string]any{}))
+	result, err := h.service.LightingCommand(c.Request.Context(), c.Param("id"), "on", map[string]any{})
+	respondOne(c, result, err)
 }
 
 func (h *DomainHandler) TurnLightingOff(c *gin.Context) {
-	respondOne(c, h.service.LightingCommand(c.Request.Context(), c.Param("id"), "off", map[string]any{}))
+	result, err := h.service.LightingCommand(c.Request.Context(), c.Param("id"), "off", map[string]any{})
+	respondOne(c, result, err)
 }
 
 func (h *DomainHandler) SetLightingBrightness(c *gin.Context) {
@@ -325,11 +464,13 @@ func (h *DomainHandler) SetLightingBrightness(c *gin.Context) {
 	if !ok {
 		return
 	}
-	respondOne(c, h.service.LightingCommand(c.Request.Context(), c.Param("id"), "brightness", body))
+	result, err := h.service.LightingCommand(c.Request.Context(), c.Param("id"), "brightness", body)
+	respondOne(c, result, err)
 }
 
 func (h *DomainHandler) ListFirmwareVersions(c *gin.Context) {
-	respond(c, h.service.ListFirmwareVersions(c.Request.Context()))
+	result, err := h.service.ListFirmwareVersions(c.Request.Context())
+	respond(c, result, err)
 }
 
 func (h *DomainHandler) CreateFirmwareVersion(c *gin.Context) {
@@ -350,7 +491,8 @@ func (h *DomainHandler) CreateFirmwareVersion(c *gin.Context) {
 	if !ok {
 		return
 	}
-	respondCreated(c, h.service.CreateFirmwareVersion(c.Request.Context(), body))
+	result, err := h.service.CreateFirmwareVersion(c.Request.Context(), body)
+	respondCreated(c, result, err)
 }
 
 func (h *DomainHandler) ServeFirmwareFile(c *gin.Context) {
@@ -383,11 +525,18 @@ func (h *DomainHandler) ServeFirmwareFile(c *gin.Context) {
 }
 
 func (h *DomainHandler) ListFirmwareChannels(c *gin.Context) {
-	respond(c, h.service.ListFirmwareChannels(c.Request.Context()))
+	result, err := h.service.ListFirmwareChannels(c.Request.Context())
+	respond(c, result, err)
+}
+
+func (h *DomainHandler) SetFirmwareChannelDefault(c *gin.Context) {
+	result, err := h.service.SetFirmwareChannelDefault(c.Request.Context(), c.Param("id"))
+	respondOne(c, result, err)
 }
 
 func (h *DomainHandler) ListOtaJobs(c *gin.Context) {
-	respond(c, h.service.ListOtaJobs(c.Request.Context(), c.Param("id")))
+	result, err := h.service.ListOtaJobs(c.Request.Context(), c.Param("id"))
+	respond(c, result, err)
 }
 
 func (h *DomainHandler) CreateOtaJob(c *gin.Context) {
@@ -404,15 +553,18 @@ func (h *DomainHandler) CreateOtaDryRun(c *gin.Context) {
 	if !ok {
 		return
 	}
-	respondOne(c, h.service.CreateOtaDryRun(c.Request.Context(), c.Param("id"), body))
+	result, err := h.service.CreateOtaDryRun(c.Request.Context(), c.Param("id"), body)
+	respondOne(c, result, err)
 }
 
 func (h *DomainHandler) ListIrrigationSystems(c *gin.Context) {
-	respond(c, h.service.ListIrrigationSystems(c.Request.Context()))
+	result, err := h.service.ListIrrigationSystems(c.Request.Context())
+	respond(c, result, err)
 }
 
 func (h *DomainHandler) GetIrrigationSafety(c *gin.Context) {
-	respondOne(c, h.service.GetIrrigationSafety(c.Request.Context()))
+	result, err := h.service.GetIrrigationSafety(c.Request.Context())
+	respondOne(c, result, err)
 }
 
 func (h *DomainHandler) RunIrrigationManual(c *gin.Context) {
@@ -428,15 +580,18 @@ func (h *DomainHandler) RunIrrigationManual(c *gin.Context) {
 }
 
 func (h *DomainHandler) ListPlantFamilies(c *gin.Context) {
-	respond(c, h.service.ListPlantWiki(c.Request.Context(), "families"))
+	result, err := h.service.ListPlantWiki(c.Request.Context(), "families")
+	respond(c, result, err)
 }
 
 func (h *DomainHandler) ListPlantCategories(c *gin.Context) {
-	respond(c, h.service.ListPlantWiki(c.Request.Context(), "categories"))
+	result, err := h.service.ListPlantWiki(c.Request.Context(), "categories")
+	respond(c, result, err)
 }
 
 func (h *DomainHandler) ListPlantSpecies(c *gin.Context) {
-	respond(c, h.service.ListPlantWiki(c.Request.Context(), "species"))
+	result, err := h.service.ListPlantWiki(c.Request.Context(), "species")
+	respond(c, result, err)
 }
 
 func bindJSONMap(c *gin.Context) (map[string]any, bool) {

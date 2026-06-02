@@ -145,6 +145,28 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
 
+  /api/zones/{id}/profiles/{profileId}/activate:
+    post:
+      tags: [Zones]
+      operationId: activateZoneProfile
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - name: profileId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Zone profile activated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ZoneProfile"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/plants:
     get:
       tags: [Plants]
@@ -320,6 +342,30 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
 
+  /api/images/{id}:
+    patch:
+      tags: [Plants]
+      operationId: updatePlantImage
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlantImageUpdateRequest"
+      responses:
+        "200":
+          description: Plant image metadata updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlantImage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/images/{id}/file:
     get:
       tags: [Plants]
@@ -380,6 +426,36 @@ paths:
                 $ref: "#/components/schemas/PlantTask"
         "400":
           $ref: "#/components/responses/BadRequest"
+
+  /api/plants/{id}/tasks/{taskId}:
+    patch:
+      tags: [Plants]
+      operationId: updatePlantTask
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlantTaskUpdateRequest"
+      responses:
+        "200":
+          description: Plant task updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlantTask"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/wiki/plant-families:
     get:
@@ -537,6 +613,76 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/automation/rules:
+    get:
+      tags: [Automation]
+      operationId: listAutomationRules
+      responses:
+        "200":
+          description: Automation rules.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AutomationRule"
+    post:
+      tags: [Automation]
+      operationId: createAutomationRule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutomationRuleCreateRequest"
+      responses:
+        "201":
+          description: Automation rule created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationRule"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/automation/rules/{id}/evaluations:
+    get:
+      tags: [Automation]
+      operationId: listAutomationRuleEvaluations
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Automation rule evaluation history.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AutomationRuleEvaluation"
+
+  /api/automation/rules/{id}/evaluate:
+    post:
+      tags: [Automation]
+      operationId: evaluateAutomationRule
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutomationRuleEvaluationRequest"
+      responses:
+        "201":
+          description: Automation rule evaluated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationRuleEvaluation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/devices:
     get:
       tags: [Devices]
@@ -582,6 +728,58 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/DeviceCapability"
+    post:
+      tags: [Devices]
+      operationId: createDeviceCapability
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeviceCapabilityCreateRequest"
+      responses:
+        "201":
+          description: Device capability created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceCapability"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/devices/{id}/capabilities/{capabilityId}:
+    patch:
+      tags: [Devices]
+      operationId: updateDeviceCapability
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - name: capabilityId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeviceCapabilityUpdateRequest"
+      responses:
+        "200":
+          description: Device capability updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceCapability"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/devices/{id}/provisioning:
     get:
@@ -619,6 +817,36 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/devices/{id}/provisioning/{provisioningId}:
+    patch:
+      tags: [Devices]
+      operationId: updateDeviceProvisioning
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - name: provisioningId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeviceProvisioningUpdateRequest"
+      responses:
+        "200":
+          description: Device provisioning metadata updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceProvisioningConfig"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/provisioning/claim:
     post:
       tags: [Devices]
@@ -640,6 +868,59 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /api/telemetry/latest:
+    get:
+      tags: [Telemetry]
+      operationId: listLatestSensorReadings
+      parameters:
+        - name: zoneId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Latest reading per enabled sensor.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LatestSensorReading"
+
+  /api/sensors/{id}/readings:
+    get:
+      tags: [Telemetry]
+      operationId: listSensorReadings
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - name: hours
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 720
+            default: 24
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 120
+      responses:
+        "200":
+          description: Sensor readings for the requested lookback window.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SensorReading"
 
   /api/sensors/{id}/calibrations:
     get:
@@ -676,6 +957,36 @@ paths:
                 $ref: "#/components/schemas/SensorCalibration"
         "400":
           $ref: "#/components/responses/BadRequest"
+
+  /api/sensors/{id}/calibrations/{calibrationId}:
+    patch:
+      tags: [Devices]
+      operationId: updateSensorCalibration
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - name: calibrationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SensorCalibrationUpdateRequest"
+      responses:
+        "200":
+          description: Sensor calibration updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SensorCalibration"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/lighting:
     get:
@@ -729,6 +1040,22 @@ paths:
                 $ref: "#/components/schemas/LightingProfile"
         "400":
           $ref: "#/components/responses/BadRequest"
+
+  /api/lighting/profiles/{id}/default:
+    post:
+      tags: [Lighting]
+      operationId: activateLightingProfileDefault
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Lighting profile marked as default for its zone.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LightingProfile"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/lighting/{id}/state:
     get:
@@ -874,6 +1201,22 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/FirmwareChannel"
+
+  /api/firmware/channels/{id}/default:
+    post:
+      tags: [Firmware]
+      operationId: setFirmwareChannelDefault
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Firmware channel set as default.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FirmwareChannel"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/devices/{id}/ota:
     get:
@@ -1333,6 +1676,21 @@ components:
         metadata:
           $ref: "#/components/schemas/JsonObject"
 
+    PlantImageUpdateRequest:
+      type: object
+      properties:
+        growthStage:
+          type: string
+          nullable: true
+        growthTracking:
+          $ref: "#/components/schemas/JsonObject"
+        tags:
+          type: array
+          items:
+            type: string
+        metadata:
+          $ref: "#/components/schemas/JsonObject"
+
     PlantTask:
       type: object
       required: [id, plantId, title, status, createdAt, updatedAt]
@@ -1385,6 +1743,20 @@ components:
           nullable: true
         recurrenceConfig:
           $ref: "#/components/schemas/JsonObject"
+        metadata:
+          $ref: "#/components/schemas/JsonObject"
+
+    PlantTaskUpdateRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [todo, done, skipped, cancelled]
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
         metadata:
           $ref: "#/components/schemas/JsonObject"
 
@@ -1624,6 +1996,136 @@ components:
           type: string
           nullable: true
 
+    AutomationRule:
+      type: object
+      required:
+        [
+          id,
+          name,
+          slug,
+          enabled,
+          severity,
+          conditionConfig,
+          actionConfig,
+          metadata,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+          nullable: true
+        enabled:
+          type: boolean
+        severity:
+          $ref: "#/components/schemas/SystemSeverity"
+        conditionConfig:
+          $ref: "#/components/schemas/JsonObject"
+        actionConfig:
+          $ref: "#/components/schemas/JsonObject"
+        metadata:
+          $ref: "#/components/schemas/JsonObject"
+        lastEvaluatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastMatchedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AutomationRuleCreateRequest:
+      type: object
+      required: [name, conditionConfig, actionConfig]
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+          nullable: true
+        enabled:
+          type: boolean
+          default: true
+        severity:
+          $ref: "#/components/schemas/SystemSeverity"
+        conditionConfig:
+          $ref: "#/components/schemas/JsonObject"
+        actionConfig:
+          $ref: "#/components/schemas/JsonObject"
+        metadata:
+          $ref: "#/components/schemas/JsonObject"
+
+    AutomationRuleEvaluation:
+      type: object
+      required:
+        [
+          id,
+          ruleId,
+          matched,
+          mode,
+          evaluationContext,
+          result,
+          actions,
+          evaluatedAt,
+          createdAt,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        ruleId:
+          type: string
+          format: uuid
+        matched:
+          type: boolean
+        mode:
+          type: string
+          enum: [dry_run, committed]
+        evaluationContext:
+          $ref: "#/components/schemas/JsonObject"
+        result:
+          $ref: "#/components/schemas/JsonObject"
+        actions:
+          type: array
+          items:
+            $ref: "#/components/schemas/JsonObject"
+        evaluatedBy:
+          type: string
+          nullable: true
+        evaluatedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    AutomationRuleEvaluationRequest:
+      type: object
+      properties:
+        evaluationContext:
+          $ref: "#/components/schemas/JsonObject"
+        commit:
+          type: boolean
+          default: false
+        evaluatedBy:
+          type: string
+          nullable: true
+
     Device:
       type: object
       required: [id, deviceUid, name, deviceType, status, createdAt, updatedAt]
@@ -1702,6 +2204,32 @@ components:
           type: string
           format: date-time
 
+    DeviceCapabilityCreateRequest:
+      type: object
+      required: [capabilityKey, capabilityType]
+      properties:
+        capabilityKey:
+          type: string
+        capabilityType:
+          type: string
+          enum: [sensor, actuator, connectivity, firmware, config]
+        enabled:
+          type: boolean
+          default: true
+        config:
+          $ref: "#/components/schemas/JsonObject"
+        metadata:
+          $ref: "#/components/schemas/JsonObject"
+
+    DeviceCapabilityUpdateRequest:
+      type: object
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+        metadata:
+          $ref: "#/components/schemas/JsonObject"
+
     DeviceProvisioningConfig:
       type: object
       required: [id, status, provisioningConfig, createdAt, updatedAt]
@@ -1759,6 +2287,132 @@ components:
       properties:
         token:
           type: string
+
+    DeviceProvisioningUpdateRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [pending, expired, revoked]
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        metadata:
+          $ref: "#/components/schemas/JsonObject"
+
+    LatestSensorReading:
+      type: object
+      required:
+        [
+          id,
+          sensorId,
+          sensorKey,
+          sensorType,
+          unit,
+          deviceId,
+          deviceName,
+          deviceUid,
+          recordedAt,
+          valueDouble,
+          metadata,
+          createdAt,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        sensorId:
+          type: string
+          format: uuid
+        sensorKey:
+          type: string
+        sensorType:
+          type: string
+        unit:
+          type: string
+        deviceId:
+          type: string
+          format: uuid
+        deviceName:
+          type: string
+        deviceUid:
+          type: string
+        zoneId:
+          type: string
+          format: uuid
+          nullable: true
+        zoneName:
+          type: string
+          nullable: true
+        recordedAt:
+          type: string
+          format: date-time
+        valueDouble:
+          type: number
+          format: double
+        metadata:
+          $ref: "#/components/schemas/JsonObject"
+        createdAt:
+          type: string
+          format: date-time
+
+    SensorReading:
+      type: object
+      required:
+        [
+          id,
+          sensorId,
+          sensorKey,
+          sensorType,
+          unit,
+          deviceId,
+          deviceName,
+          deviceUid,
+          recordedAt,
+          valueDouble,
+          metadata,
+          createdAt,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        sensorId:
+          type: string
+          format: uuid
+        sensorKey:
+          type: string
+        sensorType:
+          type: string
+        unit:
+          type: string
+        deviceId:
+          type: string
+          format: uuid
+        deviceName:
+          type: string
+        deviceUid:
+          type: string
+        zoneId:
+          type: string
+          format: uuid
+          nullable: true
+        zoneName:
+          type: string
+          nullable: true
+        recordedAt:
+          type: string
+          format: date-time
+        valueDouble:
+          type: number
+          format: double
+        metadata:
+          $ref: "#/components/schemas/JsonObject"
+        createdAt:
+          type: string
+          format: date-time
 
     SensorCalibration:
       type: object
@@ -1822,6 +2476,20 @@ components:
           $ref: "#/components/schemas/JsonObject"
         notes:
           type: string
+          nullable: true
+        metadata:
+          $ref: "#/components/schemas/JsonObject"
+
+    SensorCalibrationUpdateRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [draft, confirmed, retired]
+        confirmedAt:
+          type: string
+          format: date-time
           nullable: true
         metadata:
           $ref: "#/components/schemas/JsonObject"

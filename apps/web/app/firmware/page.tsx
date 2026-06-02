@@ -1,7 +1,13 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, Package, RefreshCcw, Rocket } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  CheckCircle2,
+  Download,
+  Package,
+  RefreshCcw,
+  Rocket,
+} from "lucide-react";
 
 import { FirmwareUploadForm } from "@/components/firmware/firmware-upload-form";
 import { OtaControlPanel } from "@/components/firmware/ota-control-panel";
@@ -23,6 +29,7 @@ import {
   fetchFirmwareChannels,
   fetchFirmwareVersions,
   queryKeys,
+  setFirmwareChannelDefaultEntry,
 } from "@/lib/queries";
 import { firmwareFileUrl } from "@/lib/api";
 
@@ -44,6 +51,17 @@ export default function FirmwarePage() {
     queryKey: queryKeys.devices,
     queryFn: fetchDevices,
     refetchInterval: poll,
+  });
+  const defaultChannelMutation = useMutation({
+    mutationFn: setFirmwareChannelDefaultEntry,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.firmwareChannels,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.firmwareVersions,
+      });
+    },
   });
   const defaultChannels =
     channels.data?.filter((channel) => channel.isDefault).length ?? 0;
@@ -151,6 +169,11 @@ export default function FirmwarePage() {
         <DataPanel title="Channels" description="Release lanes.">
           {channels.isLoading ? <DataNotice state="loading" /> : null}
           {channels.isError ? <DataNotice state="error" /> : null}
+          {defaultChannelMutation.error ? (
+            <p className="text-xs text-red-600 dark:text-red-300">
+              {defaultChannelMutation.error.message}
+            </p>
+          ) : null}
           {channels.data && channels.data.length > 0 ? (
             <RowList>
               {channels.data.map((channel) => (
@@ -165,7 +188,20 @@ export default function FirmwarePage() {
                       value={channel.isDefault ? "active" : channel.name}
                     />
                   }
-                />
+                >
+                  {!channel.isDefault ? (
+                    <Button
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                      disabled={defaultChannelMutation.isPending}
+                      onClick={() => defaultChannelMutation.mutate(channel.id)}
+                    >
+                      <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                      Set default
+                    </Button>
+                  ) : null}
+                </Row>
               ))}
             </RowList>
           ) : !channels.isLoading && !channels.isError ? (

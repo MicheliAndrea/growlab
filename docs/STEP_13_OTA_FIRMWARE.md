@@ -22,6 +22,8 @@ Completato.
   - `version`
   - `channelId` opzionale
   - `metadata` JSON opzionale
+- Se `channelId` non viene passato, l'API usa il firmware channel marcato come default.
+- `POST /api/firmware/channels/{id}/default` rende un canale il default unico.
 - I file firmware sono salvati sotto `GROWLAB_FIRMWARE_STORAGE_PATH`.
 - Il limite upload default e `32 MiB`, configurabile con `GROWLAB_FIRMWARE_UPLOAD_MAX_BYTES`.
 - `firmware_versions` conserva:
@@ -50,7 +52,7 @@ Completato.
 - Pagina `/firmware` aggiornata con:
   - form upload firmware
   - lista versioni con link file
-  - canali firmware
+  - canali firmware con cambio default manuale
   - selezione device/firmware per dry-run e creazione job OTA
   - lista job OTA con status e topic MQTT preparato
 

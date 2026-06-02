@@ -1,7 +1,19 @@
 "use client";
 
-import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Cpu, Gauge, RefreshCcw, ShieldCheck } from "lucide-react";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import {
+  Cpu,
+  Gauge,
+  RefreshCcw,
+  ShieldCheck,
+  ToggleLeft,
+  ToggleRight,
+} from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -17,12 +29,14 @@ import {
   StatusBadge,
 } from "@/components/dashboard/ui";
 import { ExportButton } from "@/components/dashboard/export-button";
+import { DeviceCapabilityForm } from "@/components/devices/device-capability-form";
 import { DeviceProvisioningPanel } from "@/components/devices/device-provisioning-panel";
 import { SensorCalibrationPanel } from "@/components/devices/sensor-calibration-panel";
 import {
   fetchDeviceCapabilities,
   fetchDevices,
   queryKeys,
+  updateDeviceCapabilityEntry,
 } from "@/lib/queries";
 
 const poll = 30_000;
@@ -40,6 +54,22 @@ export default function DevicesPage() {
       queryFn: () => fetchDeviceCapabilities(device.id),
       refetchInterval: poll,
     })),
+  });
+  const capabilityMutation = useMutation({
+    mutationFn: (input: {
+      deviceId: string;
+      capabilityId: string;
+      enabled: boolean;
+    }) =>
+      updateDeviceCapabilityEntry(input.deviceId, input.capabilityId, {
+        enabled: input.enabled,
+        metadata: { source: "web-dashboard" },
+      }),
+    onSuccess: async (_capability, input) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.deviceCapabilities(input.deviceId),
+      });
+    },
   });
 
   const capabilityCount = capabilityQueries.reduce(
@@ -137,6 +167,11 @@ export default function DevicesPage() {
           {capabilityQueries.some((query) => query.isLoading) ? (
             <DataNotice state="loading" />
           ) : null}
+          {capabilityMutation.error ? (
+            <p className="text-xs text-red-600 dark:text-red-300">
+              {capabilityMutation.error.message}
+            </p>
+          ) : null}
           {capabilityCount === 0 &&
           !capabilityQueries.some((query) => query.isLoading) ? (
             <EmptyState title="No capabilities" />
@@ -154,13 +189,41 @@ export default function DevicesPage() {
                         value={capability.enabled ? "active" : "offline"}
                       />
                     }
-                  />
+                  >
+                    <Button
+                      disabled={capabilityMutation.isPending}
+                      onClick={() =>
+                        capabilityMutation.mutate({
+                          deviceId: capability.deviceId,
+                          capabilityId: capability.id,
+                          enabled: !capability.enabled,
+                        })
+                      }
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      {capability.enabled ? (
+                        <ToggleLeft className="h-4 w-4" aria-hidden="true" />
+                      ) : (
+                        <ToggleRight className="h-4 w-4" aria-hidden="true" />
+                      )}
+                      {capability.enabled ? "Disable" : "Enable"}
+                    </Button>
+                  </Row>
                 )),
               )}
             </RowList>
           ) : null}
         </DataPanel>
       </section>
+
+      <DataPanel
+        title="Add capability"
+        description="Manual device capability metadata."
+      >
+        <DeviceCapabilityForm devices={devices.data ?? []} />
+      </DataPanel>
 
       <DataPanel
         title="Provisioning"

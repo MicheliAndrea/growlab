@@ -1,6 +1,13 @@
 "use client";
 
-import { Activity, AlertTriangle, Cpu, Leaf, RefreshCcw } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  Cpu,
+  Gauge,
+  Leaf,
+  RefreshCcw,
+} from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
@@ -30,6 +37,7 @@ import {
   fetchDevices,
   fetchFirmwareVersions,
   fetchHealth,
+  fetchLatestSensorReadings,
   fetchLightingSystems,
   fetchPlants,
   fetchSystemAlerts,
@@ -81,6 +89,11 @@ export function DashboardView() {
     queryKey: queryKeys.firmwareVersions,
     queryFn: fetchFirmwareVersions,
     refetchInterval: poll,
+  });
+  const latestReadings = useQuery({
+    queryKey: queryKeys.latestSensorReadings(),
+    queryFn: () => fetchLatestSensorReadings(),
+    refetchInterval: 15_000,
   });
 
   const acknowledgeMutation = useMutation({
@@ -142,6 +155,15 @@ export function DashboardView() {
         events.data?.filter((event) => event.severity === severity).length ?? 0,
     }),
   );
+  const telemetryTypeData = Array.from(
+    (latestReadings.data ?? []).reduce((accumulator, reading) => {
+      accumulator.set(
+        reading.sensorType,
+        (accumulator.get(reading.sensorType) ?? 0) + 1,
+      );
+      return accumulator;
+    }, new Map<string, number>()),
+  ).map(([name, value]) => ({ name, value }));
   const alertStatusData = [
     { name: "active", value: activeAlerts.length },
     {
@@ -170,7 +192,7 @@ export function DashboardView() {
 
       {health.isError ? <DataNotice state="error" /> : null}
 
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <MetricCard
           title="API"
           value={apiReady}
@@ -197,6 +219,15 @@ export function DashboardView() {
           value={plants.data?.length ?? 0}
           detail="Tracked plant records"
           icon={Leaf}
+        />
+        <MetricCard
+          title="Telemetry"
+          value={latestReadings.data?.length ?? 0}
+          detail="Latest sensor readings"
+          icon={Gauge}
+          tone={
+            (latestReadings.data?.length ?? 0) > 0 ? "success" : "secondary"
+          }
         />
       </section>
 
@@ -253,6 +284,44 @@ export function DashboardView() {
 
         <DataPanel title="Alert posture" description="Active alert pressure.">
           <DonutChart data={alertStatusData} />
+        </DataPanel>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[1fr_2fr]">
+        <DataPanel
+          title="Latest telemetry"
+          description="Most recent reading per sensor."
+        >
+          {latestReadings.isLoading ? <DataNotice state="loading" /> : null}
+          {latestReadings.isError ? <DataNotice state="error" /> : null}
+          {latestReadings.data && latestReadings.data.length > 0 ? (
+            <RowList>
+              {latestReadings.data.slice(0, 8).map((reading) => (
+                <Row
+                  key={`${reading.sensorId}-${reading.recordedAt}`}
+                  title={reading.sensorKey}
+                  detail={`${reading.deviceName} - ${reading.zoneName ?? "unassigned"} - ${formatDateTime(reading.recordedAt)}`}
+                  meta={
+                    <StatusBadge
+                      value={formatReadingValue(
+                        reading.valueDouble,
+                        reading.unit,
+                      )}
+                    />
+                  }
+                />
+              ))}
+            </RowList>
+          ) : !latestReadings.isLoading && !latestReadings.isError ? (
+            <EmptyState title="No sensor readings" />
+          ) : null}
+        </DataPanel>
+
+        <DataPanel
+          title="Telemetry coverage"
+          description="Latest readings by sensor type."
+        >
+          <ResourceBarChart data={telemetryTypeData} />
         </DataPanel>
       </section>
 
@@ -364,4 +433,9 @@ export function DashboardView() {
       </section>
     </div>
   );
+}
+
+function formatReadingValue(value: number, unit: string) {
+  const formatted = Number.isFinite(value) ? value.toFixed(1) : String(value);
+  return `${formatted}${unit}`;
 }

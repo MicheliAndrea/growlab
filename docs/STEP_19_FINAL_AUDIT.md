@@ -24,11 +24,14 @@ Verifiche leggere standard:
 - STEP 03B applicato dopo STEP 03 e prima di STEP 04
 - system_alerts usa solo stati active/acknowledged/resolved
 - system_events presente come timeline globale
+- rules engine MVP presente come valutazione manuale/dry-run senza scheduler automatico
 - STEP 06 espone handler sottili, service e repository per i moduli domain principali
 - provisioning device non espone token_hash
+- provisioning device supporta revoke/expire manuale senza cancellare storico
 - Plant Wiki coperta nel contratto OpenAPI e nelle rotte API
 - STEP 07 worker MQTT sottoscrive telemetry/heartbeat/status/ota status
 - devices.last_seen_at presente e aggiornato dal worker
+- API espone telemetria live e storico sensore con `GET /api/telemetry/latest` e `GET /api/sensors/{id}/readings`
 - STEP 08 Next.js App Router foundation presente con Tailwind, shadcn config e client Orval
 - STEP 09 dashboard UI presente su `/` e `/dashboard`
 - STEP 09 pagine operative presenti per plants/zones/devices/lighting/images/firmware/settings
@@ -36,8 +39,16 @@ Verifiche leggere standard:
 - STEP 09 polling frontend implementato con TanStack Query
 - STEP 09 grafici dashboard implementati con Recharts
 - STEP 09 light/dark/system mode implementato senza introdurre nuovo stack
+- STEP 09 pannello calibrazione include storico letture sensore con mini chart
+- STEP 09 console Operations include creazione/valutazione rules engine e storico valutazioni
+- STEP 09 pagina Devices include creazione manuale device capability oltre alla lista
+- STEP 09 pagina Devices include toggle manuale enable/disable capability
+- STEP 09 pannello calibrazione sensori include conferma, ritiro e riapertura calibrazioni
+- STEP 09 dettaglio zona include attivazione transazionale dei target profile
 - STEP 10 plant events esposti in API e OpenAPI
+- STEP 10 plant tasks supportano checklist manuale con update status
 - STEP 10 plant_status_history popolato su create/update plant health
+- STEP 10 plant image metadata supporta update manuale di growth stage, tags e growth_tracking
 - STEP 10 pagine dettaglio e form create/edit presenti per plants/zones
 - STEP 10 Plant Wiki base visibile nel frontend
 - STEP 11 upload immagini usa multipart con validazione MIME/size
@@ -49,7 +60,9 @@ Verifiche leggere standard:
 - STEP 12 Shelly Dimmer 2 usa HTTP API locale con timeout
 - STEP 12 comandi lighting ON/OFF/brightness registrano lighting_events
 - STEP 12 UI lighting espone stato, ON/OFF, brightness slider e storico eventi
+- STEP 12 lighting profiles supportano default transazionale per zona senza comando fisico
 - STEP 13 firmware upload usa multipart e salva artefatti su volume
+- STEP 13 firmware channels hanno un solo default configurabile da API/UI
 - STEP 13 firmware file endpoint serve solo path relativi controllati
 - STEP 13 OTA job crea metadata.mqttCommand senza publish automatico
 - STEP 13 OTA dry-run verifica compatibilita minima device/firmware

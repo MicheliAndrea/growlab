@@ -4,6 +4,7 @@ import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Camera, HardDrive, Image, RefreshCcw, Sprout } from "lucide-react";
 
 import { ImageGallery } from "@/components/images/image-gallery";
+import { ImageMetadataPanel } from "@/components/images/image-metadata-panel";
 import { PlantPhotoTimeline } from "@/components/images/plant-photo-timeline";
 import { Button } from "@/components/ui/button";
 import {
@@ -115,6 +116,21 @@ export default function ImagesPage() {
         ) : null}
         {!plants.isLoading && !imageQueries.some((query) => query.isLoading) ? (
           <ImageGallery images={images} />
+        ) : null}
+      </DataPanel>
+
+      <DataPanel
+        title="Growth metadata"
+        description="Manual growth-stage, tags and tracking metadata."
+      >
+        {plants.isLoading || imageQueries.some((query) => query.isLoading) ? (
+          <DataNotice state="loading" />
+        ) : null}
+        {plants.isError || imageQueries.some((query) => query.isError) ? (
+          <DataNotice state="error" />
+        ) : null}
+        {!plants.isLoading && !imageQueries.some((query) => query.isLoading) ? (
+          <ImageMetadataPanel images={images} />
         ) : null}
       </DataPanel>
 

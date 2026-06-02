@@ -27,7 +27,7 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 	router.Use(gin.Recovery())
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     opts.Config.AllowedCORSOrigins,
-		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
+		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: false,
@@ -59,6 +59,7 @@ func registerDomainRoutes(router *gin.Engine, domain *handlers.DomainHandler) {
 	router.DELETE("/api/zones/:id", domain.DeleteZone)
 	router.GET("/api/zones/:id/profiles", domain.ListZoneProfiles)
 	router.POST("/api/zones/:id/profiles", domain.CreateZoneProfile)
+	router.POST("/api/zones/:id/profiles/:profileId/activate", domain.ActivateZoneProfile)
 
 	router.GET("/api/plants", domain.ListPlants)
 	router.POST("/api/plants", domain.CreatePlant)
@@ -70,9 +71,11 @@ func registerDomainRoutes(router *gin.Engine, domain *handlers.DomainHandler) {
 	router.POST("/api/plants/:id/events", domain.CreatePlantEvent)
 	router.GET("/api/plants/:id/images", domain.ListPlantImages)
 	router.POST("/api/plants/:id/images", domain.CreatePlantImage)
+	router.PATCH("/api/images/:id", domain.UpdatePlantImage)
 	router.GET("/api/images/:id/file", domain.ServePlantImage)
 	router.GET("/api/plants/:id/tasks", domain.ListPlantTasks)
 	router.POST("/api/plants/:id/tasks", domain.CreatePlantTask)
+	router.PATCH("/api/plants/:id/tasks/:taskId", domain.UpdatePlantTask)
 
 	router.GET("/api/wiki/plant-families", domain.ListPlantFamilies)
 	router.GET("/api/wiki/plant-categories", domain.ListPlantCategories)
@@ -84,19 +87,30 @@ func registerDomainRoutes(router *gin.Engine, domain *handlers.DomainHandler) {
 	router.POST("/api/system/alerts", domain.CreateSystemAlert)
 	router.POST("/api/system/alerts/:id/acknowledge", domain.AcknowledgeSystemAlert)
 	router.POST("/api/system/alerts/:id/resolve", domain.ResolveSystemAlert)
+	router.GET("/api/automation/rules", domain.ListAutomationRules)
+	router.POST("/api/automation/rules", domain.CreateAutomationRule)
+	router.GET("/api/automation/rules/:id/evaluations", domain.ListAutomationRuleEvaluations)
+	router.POST("/api/automation/rules/:id/evaluate", domain.EvaluateAutomationRule)
 
 	router.GET("/api/devices", domain.ListDevices)
 	router.GET("/api/devices/:id", domain.GetDevice)
 	router.GET("/api/devices/:id/capabilities", domain.ListDeviceCapabilities)
+	router.POST("/api/devices/:id/capabilities", domain.CreateDeviceCapability)
+	router.PATCH("/api/devices/:id/capabilities/:capabilityId", domain.UpdateDeviceCapability)
 	router.GET("/api/devices/:id/provisioning", domain.GetDeviceProvisioning)
 	router.POST("/api/devices/:id/provisioning", domain.CreateDeviceProvisioning)
+	router.PATCH("/api/devices/:id/provisioning/:provisioningId", domain.UpdateDeviceProvisioning)
 	router.POST("/api/provisioning/claim", domain.ClaimDeviceProvisioning)
+	router.GET("/api/telemetry/latest", domain.ListLatestSensorReadings)
+	router.GET("/api/sensors/:id/readings", domain.ListSensorReadings)
 	router.GET("/api/sensors/:id/calibrations", domain.ListSensorCalibrations)
 	router.POST("/api/sensors/:id/calibrations", domain.CreateSensorCalibration)
+	router.PATCH("/api/sensors/:id/calibrations/:calibrationId", domain.UpdateSensorCalibration)
 
 	router.GET("/api/lighting", domain.ListLightingSystems)
 	router.GET("/api/lighting/profiles", domain.ListLightingProfiles)
 	router.POST("/api/lighting/profiles", domain.CreateLightingProfile)
+	router.POST("/api/lighting/profiles/:id/default", domain.ActivateLightingProfileDefault)
 	router.GET("/api/lighting/:id/state", domain.GetLightingState)
 	router.GET("/api/lighting/:id/events", domain.ListLightingEvents)
 	router.POST("/api/lighting/:id/on", domain.TurnLightingOn)
@@ -105,8 +119,9 @@ func registerDomainRoutes(router *gin.Engine, domain *handlers.DomainHandler) {
 
 	router.GET("/api/firmware", domain.ListFirmwareVersions)
 	router.POST("/api/firmware", domain.CreateFirmwareVersion)
-	router.GET("/api/firmware/:id/file", domain.ServeFirmwareFile)
 	router.GET("/api/firmware/channels", domain.ListFirmwareChannels)
+	router.POST("/api/firmware/channels/:id/default", domain.SetFirmwareChannelDefault)
+	router.GET("/api/firmware/:id/file", domain.ServeFirmwareFile)
 	router.GET("/api/devices/:id/ota", domain.ListOtaJobs)
 	router.POST("/api/devices/:id/ota", domain.CreateOtaJob)
 	router.POST("/api/devices/:id/ota/dry-run", domain.CreateOtaDryRun)

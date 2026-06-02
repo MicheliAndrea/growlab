@@ -13,6 +13,7 @@ import {
   StatusBadge,
 } from "@/components/dashboard/ui";
 import { Button } from "@/components/ui/button";
+import { MiniLineChart } from "@/components/ui/chart";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,11 +21,15 @@ import type {
   SensorCalibration,
   SensorCalibrationCreateRequest,
   SensorCalibrationCreateRequestStatus,
+  SensorCalibrationUpdateRequestStatus,
+  SensorReading,
 } from "@/lib/api";
 import {
   createSensorCalibrationEntry,
   fetchSensorCalibrations,
+  fetchSensorReadings,
   queryKeys,
+  updateSensorCalibrationEntry,
 } from "@/lib/queries";
 
 const selectClass =
@@ -59,6 +64,15 @@ export function SensorCalibrationPanel() {
     refetchInterval: 30_000,
   });
 
+  const readingsQuery = useQuery({
+    queryKey: activeSensorId
+      ? queryKeys.sensorReadings(activeSensorId, 24, 120)
+      : ["sensor-readings", "none"],
+    queryFn: () => fetchSensorReadings(activeSensorId, 24, 120),
+    enabled: Boolean(activeSensorId),
+    refetchInterval: 30_000,
+  });
+
   const createMutation = useMutation({
     mutationFn: (request: SensorCalibrationCreateRequest) =>
       createSensorCalibrationEntry(activeSensorId, request),
@@ -70,8 +84,41 @@ export function SensorCalibrationPanel() {
     },
   });
 
+  const updateMutation = useMutation({
+    mutationFn: (input: {
+      calibrationId: string;
+      status: SensorCalibrationUpdateRequestStatus;
+    }) =>
+      updateSensorCalibrationEntry(activeSensorId, input.calibrationId, {
+        status: input.status,
+        confirmedAt:
+          input.status === "confirmed" ? new Date().toISOString() : undefined,
+        metadata: {
+          source: "web-dashboard",
+        },
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.sensorCalibrations(activeSensorId),
+      });
+    },
+  });
+
   const latestCalibration = calibrationsQuery.data?.[0];
   const calibrationCount = calibrationsQuery.data?.length ?? 0;
+  const readings = readingsQuery.data ?? [];
+  const latestReading = readings[0];
+  const chartData = React.useMemo(
+    () =>
+      readings
+        .slice()
+        .reverse()
+        .map((reading) => ({
+          time: formatChartTime(reading.recordedAt),
+          value: reading.valueDouble,
+        })),
+    [readings],
+  );
 
   function loadSensor() {
     const normalized = sensorIdInput.trim();
@@ -326,6 +373,11 @@ export function SensorCalibrationPanel() {
                 <DataNotice state="loading" />
               ) : null}
               {calibrationsQuery.isError ? <DataNotice state="error" /> : null}
+              {updateMutation.error ? (
+                <p className="text-xs text-red-600 dark:text-red-300">
+                  {updateMutation.error.message}
+                </p>
+              ) : null}
               {!calibrationsQuery.isLoading &&
               !calibrationsQuery.isError &&
               calibrationCount === 0 ? (
@@ -340,6 +392,13 @@ export function SensorCalibrationPanel() {
                     <CalibrationRow
                       key={calibration.id}
                       calibration={calibration}
+                      isPending={updateMutation.isPending}
+                      onStatusChange={(status) =>
+                        updateMutation.mutate({
+                          calibrationId: calibration.id,
+                          status,
+                        })
+                      }
                     />
                   ))}
                 </RowList>
@@ -353,7 +412,7 @@ export function SensorCalibrationPanel() {
           )}
         </div>
 
-        <div>
+        <div className="grid gap-4">
           <RowList>
             <Row
               title="Calibration count"
@@ -373,13 +432,67 @@ export function SensorCalibrationPanel() {
               }
             />
           </RowList>
+
+          <div className="grid gap-3 rounded-md border border-border p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="text-sm font-medium">Recent readings</div>
+                <div className="text-xs text-muted-foreground">
+                  Last 24 hours, capped at 120 samples.
+                </div>
+              </div>
+              <StatusBadge value={latestReading ? "active" : "empty"} />
+            </div>
+
+            {activeSensorId ? (
+              <>
+                {readingsQuery.isLoading ? (
+                  <DataNotice state="loading" />
+                ) : null}
+                {readingsQuery.isError ? <DataNotice state="error" /> : null}
+                {!readingsQuery.isLoading &&
+                !readingsQuery.isError &&
+                readings.length === 0 ? (
+                  <EmptyState
+                    title="No readings"
+                    detail="The sensor has no telemetry in the selected window."
+                  />
+                ) : null}
+                {readings.length > 0 ? (
+                  <>
+                    <div className="h-[120px]">
+                      <MiniLineChart data={chartData} />
+                    </div>
+                    <RowList>
+                      {readings.slice(0, 4).map((reading) => (
+                        <ReadingRow key={reading.id} reading={reading} />
+                      ))}
+                    </RowList>
+                  </>
+                ) : null}
+              </>
+            ) : (
+              <EmptyState
+                title="Load a sensor id"
+                detail="Recent telemetry will appear after the sensor is loaded."
+              />
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function CalibrationRow({ calibration }: { calibration: SensorCalibration }) {
+function CalibrationRow({
+  calibration,
+  isPending,
+  onStatusChange,
+}: {
+  calibration: SensorCalibration;
+  isPending: boolean;
+  onStatusChange: (status: SensorCalibrationUpdateRequestStatus) => void;
+}) {
   return (
     <Row
       title={calibration.method}
@@ -389,7 +502,46 @@ function CalibrationRow({ calibration }: { calibration: SensorCalibration }) {
       <div className="max-w-full truncate text-xs text-muted-foreground">
         {summary(calibration.calibrationData)}
       </div>
+      {calibration.status !== "confirmed" ? (
+        <Button
+          disabled={isPending}
+          onClick={() => onStatusChange("confirmed")}
+          size="sm"
+          variant="outline"
+        >
+          Confirm
+        </Button>
+      ) : null}
+      {calibration.status !== "retired" ? (
+        <Button
+          disabled={isPending}
+          onClick={() => onStatusChange("retired")}
+          size="sm"
+          variant="secondary"
+        >
+          Retire
+        </Button>
+      ) : (
+        <Button
+          disabled={isPending}
+          onClick={() => onStatusChange("draft")}
+          size="sm"
+          variant="outline"
+        >
+          Reopen
+        </Button>
+      )}
     </Row>
+  );
+}
+
+function ReadingRow({ reading }: { reading: SensorReading }) {
+  return (
+    <Row
+      title={formatReadingValue(reading.valueDouble, reading.unit)}
+      detail={`${reading.sensorKey} - ${formatDateTime(reading.recordedAt)}`}
+      meta={<StatusBadge value={reading.sensorType} />}
+    />
   );
 }
 
@@ -413,6 +565,23 @@ function parseOptionalNumber(value: string, label: string) {
   }
 
   return parsed;
+}
+
+function formatReadingValue(value: number, unit?: string | null) {
+  const normalized = Number.isInteger(value) ? String(value) : value.toFixed(2);
+  return unit ? `${normalized} ${unit}` : normalized;
+}
+
+function formatChartTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("en", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function summary(value: unknown) {

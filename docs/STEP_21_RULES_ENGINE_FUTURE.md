@@ -2,9 +2,9 @@
 
 ## Stato
 
-Feature futura.
+MVP consultivo implementato.
 
-Non implementare nel MVP.
+Il rules engine completo resta futuro: niente scheduler automatico, niente AI e niente azioni fisiche.
 
 ## Obiettivo
 
@@ -45,6 +45,30 @@ SE OTA fallisce
 ALLORA crea alert critical
 ```
 
+## Struttura implementata nel MVP
+
+```text
+automation_rules
+automation_rule_evaluations
+```
+
+Il modello usa JSONB per `condition_config`, `action_config`, contesto valutazione e risultato. Questo evita di bloccare ora una DSL troppo rigida.
+
+Endpoint implementati:
+
+```text
+GET /api/automation/rules
+POST /api/automation/rules
+GET /api/automation/rules/{id}/evaluations
+POST /api/automation/rules/{id}/evaluate
+```
+
+La UI e nella pagina:
+
+```text
+/operations
+```
+
 ## Struttura futura suggerita
 
 ```text
@@ -59,7 +83,6 @@ rule_evaluations
 ```text
 create_alert
 create_system_event
-create_plant_event
 show_dashboard_suggestion
 ```
 
@@ -73,21 +96,16 @@ run_ota
 change_device_config
 ```
 
-## UI futura
+## UI MVP
 
-Pagina:
-
-```text
-/settings/rules
-```
-
-Funzioni:
+Funzioni implementate:
 
 - lista regole;
-- abilita/disabilita;
+- creazione regola;
 - visualizza ultima valutazione;
 - storico valutazioni;
-- test manuale regola.
+- test manuale regola;
+- commit esplicito delle sole azioni sicure.
 
 ## Priorità
 

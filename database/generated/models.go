@@ -10,6 +10,35 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AutomationRule struct {
+	ID              pgtype.UUID        `db:"id" json:"id"`
+	Name            string             `db:"name" json:"name"`
+	Slug            string             `db:"slug" json:"slug"`
+	Description     pgtype.Text        `db:"description" json:"description"`
+	Enabled         bool               `db:"enabled" json:"enabled"`
+	Severity        string             `db:"severity" json:"severity"`
+	ConditionConfig []byte             `db:"condition_config" json:"condition_config"`
+	ActionConfig    []byte             `db:"action_config" json:"action_config"`
+	Metadata        []byte             `db:"metadata" json:"metadata"`
+	LastEvaluatedAt pgtype.Timestamptz `db:"last_evaluated_at" json:"last_evaluated_at"`
+	LastMatchedAt   pgtype.Timestamptz `db:"last_matched_at" json:"last_matched_at"`
+	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type AutomationRuleEvaluation struct {
+	ID                pgtype.UUID        `db:"id" json:"id"`
+	RuleID            pgtype.UUID        `db:"rule_id" json:"rule_id"`
+	Matched           bool               `db:"matched" json:"matched"`
+	Mode              string             `db:"mode" json:"mode"`
+	EvaluationContext []byte             `db:"evaluation_context" json:"evaluation_context"`
+	Result            []byte             `db:"result" json:"result"`
+	Actions           []byte             `db:"actions" json:"actions"`
+	EvaluatedBy       pgtype.Text        `db:"evaluated_by" json:"evaluated_by"`
+	EvaluatedAt       pgtype.Timestamptz `db:"evaluated_at" json:"evaluated_at"`
+	CreatedAt         pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type Device struct {
 	ID                pgtype.UUID        `db:"id" json:"id"`
 	ZoneID            pgtype.UUID        `db:"zone_id" json:"zone_id"`

@@ -38,24 +38,24 @@ Implementare moduli API principali.
 ## Moduli coperti
 
 - Zones: list, create, get, update, delete.
-- Zone profiles: list, create.
+- Zone profiles: list, create, activate.
 - Plants: list, create, get, update, delete.
 - Plant timeline: eventi, immagini, task e stato salute manuale.
-- Plant image metadata: insert metadata, growth tracking e tag manuali; nessun blob nel DB.
-- Plant tasks: list, create.
+- Plant image metadata: insert/update metadata, growth tracking e tag manuali; nessun blob nel DB.
+- Plant tasks: list, create, update status.
 - Plant Wiki: families, categories, species.
 - System events: list, create.
 - System alerts: list, create, acknowledge, resolve.
-- Devices: list, get, capabilities, provisioning metadata senza esporre token hash.
-- Sensor calibrations: list, create.
-- Lighting: systems, profiles con steps, comandi on/off/brightness registrati come eventi.
-- Firmware: versions, channels, OTA job metadata e OTA dry-run metadata.
+- Devices: list, get, capabilities create/list/update enabled, provisioning metadata con revoke/expire manuale senza esporre token hash.
+- Sensor calibrations: list, create, update status.
+- Lighting: systems, profiles con steps, profilo default per zona, comandi on/off/brightness registrati come eventi.
+- Firmware: versions, channels con default configurabile, OTA job metadata e OTA dry-run metadata.
 - Irrigation: list sistemi; manual-run ritorna `IRRIGATION_DISABLED`.
 
 ## Esclusioni confermate
 
 - Nessuna autenticazione.
 - Nessun frontend.
-- Nessun rules engine.
+- Nessun rules engine in STEP 06; il rules engine MVP consultivo viene tracciato nello STEP 21.
 - Nessuna AI tecnica.
 - Nessuna irrigazione attiva.
