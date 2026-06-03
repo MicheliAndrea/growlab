@@ -38,8 +38,8 @@ make test
 
 ## Evoluzioni applicative
 
-- Rendere piu robuste le schermate operative frontend con stati vuoti e filtri.
-- Aggiungere seed dati locali per demo e test manuali.
+- Valutare URL query per condividere viste filtrate se serve passare link operativi tra macchine/browser.
+- Usare `make seed-demo` per caricare dati locali demo/test manuali quando serve.
 - Valutare test API mirati per handler critici senza lanciare build globale.
 - Valutare simulazione lighting piu precisa se servono curve e transizioni reali.
 - Valutare un vero editor grafico per il digital twin se serviranno coordinate persistenti piu ricche.

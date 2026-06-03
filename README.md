@@ -338,16 +338,29 @@ make sqlc
 make openapi-generate
 make docker-config
 make security-check
+make db-config
+make db-check
+make seed-demo
 ```
 
 Database migrations:
 
 ```bash
+make db-config
+make db-check
 make migrate-up
 make migrate-down
 ```
 
-`make migrate-up` applies changes to the configured database. Run it only when `.env` points to the intended database.
+`make db-config` prints the database target with the password redacted. `make db-check` performs a read-only PostgreSQL connection check. `make migrate-up` applies changes to the configured database, so run it only when `.env` points to the intended target.
+
+Demo data:
+
+```bash
+make seed-demo
+```
+
+The demo seed is idempotent and lives in `database/seeds/demo.sql`. It inserts sample zones, plants, devices, telemetry, alerts, firmware metadata and safe operational records for local evaluation.
 
 Development helpers:
 

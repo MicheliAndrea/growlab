@@ -3,8 +3,15 @@
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckSquare, Leaf, RefreshCcw } from "lucide-react";
 import Link from "next/link";
+import { useMemo } from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  ListFilterBar,
+  SearchFilter,
+  SelectFilter,
+  uniqueFilterOptions,
+} from "@/components/dashboard/list-filters";
 import {
   DataNotice,
   DataPanel,
@@ -25,11 +32,24 @@ import {
   fetchPlantTasks,
   queryKeys,
 } from "@/lib/queries";
+import { usePersistentStringState } from "@/lib/persistent-state";
 
 const poll = 30_000;
 
 export default function PlantsPage() {
   const queryClient = useQueryClient();
+  const [plantSearch, setPlantSearch] = usePersistentStringState(
+    "plants.search",
+    "",
+  );
+  const [statusFilter, setStatusFilter] = usePersistentStringState(
+    "plants.status",
+    "all",
+  );
+  const [healthFilter, setHealthFilter] = usePersistentStringState(
+    "plants.health",
+    "all",
+  );
   const plants = useQuery({
     queryKey: queryKeys.plants,
     queryFn: fetchPlants,
@@ -63,6 +83,43 @@ export default function PlantsPage() {
   const healthyPlants =
     plants.data?.filter((plant) => plant.currentHealthStatus === "healthy")
       .length ?? 0;
+  const statusOptions = useMemo(
+    () =>
+      uniqueFilterOptions(
+        (plants.data ?? []).map((plant) => plant.status),
+        "All statuses",
+      ),
+    [plants.data],
+  );
+  const healthOptions = useMemo(
+    () =>
+      uniqueFilterOptions(
+        (plants.data ?? []).map((plant) => plant.currentHealthStatus),
+        "All health",
+      ),
+    [plants.data],
+  );
+  const filteredPlants = useMemo(() => {
+    const search = plantSearch.trim().toLowerCase();
+
+    return (plants.data ?? []).filter((plant) => {
+      const matchesSearch =
+        search.length === 0 ||
+        [
+          plant.name,
+          plant.status,
+          plant.currentHealthStatus,
+          plant.zoneId,
+          plant.speciesId,
+        ].some((value) => value?.toLowerCase().includes(search));
+      const matchesStatus =
+        statusFilter === "all" || plant.status === statusFilter;
+      const matchesHealth =
+        healthFilter === "all" || plant.currentHealthStatus === healthFilter;
+
+      return matchesSearch && matchesStatus && matchesHealth;
+    });
+  }, [healthFilter, plantSearch, plants.data, statusFilter]);
 
   return (
     <div className="grid gap-6">
@@ -75,8 +132,8 @@ export default function PlantsPage() {
           <ExportButton
             jsonFilename="plants.json"
             csvFilename="plants.csv"
-            data={plants.data ?? []}
-            csvRows={(plants.data ?? []).map((plant) => ({
+            data={filteredPlants}
+            csvRows={filteredPlants.map((plant) => ({
               id: plant.id,
               name: plant.name,
               zoneId: plant.zoneId ?? "",
@@ -122,20 +179,53 @@ export default function PlantsPage() {
           tone={openTasks > 0 ? "warning" : "success"}
         />
         <MetricCard
-          title="Task sources"
-          value={taskQueries.length}
-          detail="Plants queried for tasks"
-          icon={CheckSquare}
+          title="Visible"
+          value={filteredPlants.length}
+          detail="After list filters"
+          icon={Leaf}
         />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.3fr_0.7fr]">
         <DataPanel title="Plants" description="Current plant records.">
+          <ListFilterBar
+            hasActiveFilters={
+              plantSearch !== "" ||
+              statusFilter !== "all" ||
+              healthFilter !== "all"
+            }
+            onReset={() => {
+              setPlantSearch("");
+              setStatusFilter("all");
+              setHealthFilter("all");
+            }}
+            resultCount={filteredPlants.length}
+            totalCount={plants.data?.length ?? 0}
+          >
+            <SearchFilter
+              label="Search plants"
+              placeholder="Search plants"
+              value={plantSearch}
+              onValueChange={setPlantSearch}
+            />
+            <SelectFilter
+              label="Filter plant status"
+              value={statusFilter}
+              onValueChange={setStatusFilter}
+              options={statusOptions}
+            />
+            <SelectFilter
+              label="Filter plant health"
+              value={healthFilter}
+              onValueChange={setHealthFilter}
+              options={healthOptions}
+            />
+          </ListFilterBar>
           {plants.isLoading ? <DataNotice state="loading" /> : null}
           {plants.isError ? <DataNotice state="error" /> : null}
-          {plants.data && plants.data.length > 0 ? (
+          {filteredPlants.length > 0 ? (
             <RowList>
-              {plants.data.map((plant) => (
+              {filteredPlants.map((plant) => (
                 <Row
                   key={plant.id}
                   title={plant.name}
@@ -156,8 +246,12 @@ export default function PlantsPage() {
                 </Row>
               ))}
             </RowList>
-          ) : !plants.isLoading && !plants.isError ? (
-            <EmptyState title="No plants" />
+          ) : !plants.isLoading && !plants.isError && plants.data ? (
+            <EmptyState
+              title={
+                plants.data.length > 0 ? "No matching plants" : "No plants"
+              }
+            />
           ) : null}
         </DataPanel>
 

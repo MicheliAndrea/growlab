@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help dev dev-web dev-api dev-worker build test lint docker-config security-check backup openapi-generate sqlc migrate-up migrate-down
+.PHONY: help dev dev-web dev-api dev-worker build test lint docker-config security-check backup openapi-generate sqlc migrate-up migrate-down db-config db-check seed-demo
 
 ifneq (,$(wildcard .env))
 include .env
@@ -15,7 +15,9 @@ GO_TOOL_CACHE ?= /tmp/growlab-go-build
 PNPM ?= pnpm
 SQLC ?= $(shell command -v sqlc 2>/dev/null || command -v $(HOME)/go/bin/sqlc 2>/dev/null || printf "sqlc")
 SQLC_CONFIG ?= sqlc.yaml
+PSQL ?= $(shell command -v psql 2>/dev/null || printf "psql")
 MIGRATIONS_DIR ?= database/migrations
+DEMO_SEED ?= database/seeds/demo.sql
 OPENAPI_SPEC ?= openapi/growlab.openapi.yaml
 
 GROWLAB_DB_HOST ?= db-host
@@ -44,6 +46,9 @@ help:
 	@printf "%s\n" "  make sqlc"
 	@printf "%s\n" "  make migrate-up"
 	@printf "%s\n" "  make migrate-down"
+	@printf "%s\n" "  make db-config"
+	@printf "%s\n" "  make db-check"
+	@printf "%s\n" "  make seed-demo"
 
 dev:
 	@printf "%s\n" "App dev commands will be wired in later steps."
@@ -102,4 +107,32 @@ migrate-down:
 		GOOSE_DRIVER="$(GOOSE_DRIVER)" GOOSE_DBSTRING="$(DB_DSN)" GOOSE_MIGRATION_DIR="$(MIGRATIONS_DIR)" $(GOOSE) down; \
 	else \
 		GOCACHE=$(GO_TOOL_CACHE) $(GO) run ./tools/goose-lite down $(MIGRATIONS_DIR); \
+	fi
+
+db-config:
+	@printf "%s\n" "GrowLab database configuration"
+	@printf "%s\n" "  host: $(GROWLAB_DB_HOST)"
+	@printf "%s\n" "  port: $(GROWLAB_DB_PORT)"
+	@printf "%s\n" "  dbname: $(GROWLAB_DB_NAME)"
+	@printf "%s\n" "  user: $(GROWLAB_DB_USER)"
+	@printf "%s\n" "  password: ***"
+	@printf "%s\n" "  sslmode: $(GROWLAB_DB_SSLMODE)"
+	@printf "%s\n" "  dsn source: $(origin DB_DSN)"
+
+db-check:
+	@if command -v $(PSQL) >/dev/null 2>&1; then \
+		$(PSQL) "$(DB_DSN)" -v ON_ERROR_STOP=1 \
+			-c "SELECT current_database() AS database, current_user AS username, inet_server_addr() AS server_addr, inet_server_port() AS server_port;" \
+			-c "SELECT ssl, version AS ssl_version, cipher FROM pg_stat_ssl WHERE pid = pg_backend_pid();"; \
+	else \
+		printf "%s\n" "psql not found; install PostgreSQL client tools to check the database connection."; \
+		exit 1; \
+	fi
+
+seed-demo:
+	@if command -v $(PSQL) >/dev/null 2>&1; then \
+		$(PSQL) "$(DB_DSN)" -v ON_ERROR_STOP=1 -f "$(DEMO_SEED)"; \
+	else \
+		printf "%s\n" "psql not found; install PostgreSQL client tools to run demo seeds."; \
+		exit 1; \
 	fi

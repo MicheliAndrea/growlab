@@ -862,6 +862,66 @@ make security-check
 git diff --check
 ```
 
+## Demo seed data
+
+Implementato seed dati demo opzionale e idempotente.
+
+- Aggiunto `database/seeds/demo.sql`.
+- Aggiunto target `make seed-demo`.
+- Il seed inserisce grow area, zone, Plant Wiki base, piante, task, immagini metadata, device, sensori, telemetry recente, heartbeat, capability, calibrazioni, zone profiles, lighting profile, system alert/event, firmware metadata, OTA dry-run, provisioning metadata e una regola demo manuale.
+- Il seed non fa parte delle migrazioni e non viene applicato automaticamente.
+- Alcune immagini/firmware demo puntano a path fittizi e sono marcati con `metadata.fileMissing=true`, quindi servono per testare UI e metadata, non download reali.
+
+Verifiche leggere eseguite:
+
+```bash
+pnpm exec prettier --write README.md docs/NEXT_STEPS.md docs/IMPLEMENTATION_STATUS.md
+git diff --check -- README.md Makefile database/seeds/demo.sql docs/NEXT_STEPS.md docs/IMPLEMENTATION_STATUS.md
+```
+
+## Database operator helpers
+
+Implementati target Makefile leggeri per ispezionare il database reale senza applicare migrazioni.
+
+- `make db-config` stampa host, porta, database, utente, sslmode e sorgente DSN con password redatta.
+- `make db-check` usa `psql` per una query read-only su database, utente, indirizzo server e stato SSL.
+- Il runbook deploy ora chiede `db-config` e `db-check` prima di `make migrate-up`.
+
+Verifiche leggere eseguite:
+
+```bash
+make help
+make db-config
+pnpm exec prettier --write README.md docs/DEPLOYMENT_RUNBOOK.md docs/IMPLEMENTATION_STATUS.md
+git diff --check -- Makefile README.md docs/DEPLOYMENT_RUNBOOK.md docs/IMPLEMENTATION_STATUS.md
+```
+
+## Frontend List Filters
+
+Rafforzate le liste operative principali con filtri locali e export coerente con i risultati visibili.
+
+- Aggiunto componente condiviso `ListFilterBar` con ricerca testuale e select native coerenti con il design system.
+- Aggiunti filtri su `/plants` per testo, stato record e salute manuale.
+- Aggiunti filtri su `/zones` per testo e tipo ambiente.
+- Aggiunti filtri su `/devices` per testo, stato e tipo device.
+- Aggiunti filtri su `/operations` per alert/eventi tramite testo e severita.
+- Aggiunti filtri su `/images` per testo, pianta e growth stage.
+- Aggiunti filtri su `/firmware` per testo, tipo device e channel.
+- Gli export JSON/CSV di plants, zones, devices, images e firmware usano ora le righe filtrate.
+- I pannelli target profiles e capabilities seguono rispettivamente le zone e i device visibili.
+- Gallery, metadata editor e photo timeline seguono lo stesso filtro immagini.
+- La registry firmware mostra il nome del channel quando disponibile invece dell'UUID.
+- I filtri sono persistiti in `localStorage` con namespace `growlab:*`.
+- Ogni filter bar persistente espone `Reset` quando ci sono filtri attivi.
+
+Verifiche leggere eseguite:
+
+```bash
+pnpm exec prettier --write apps/web/app/plants/page.tsx apps/web/app/zones/page.tsx apps/web/app/devices/page.tsx apps/web/app/images/page.tsx apps/web/app/firmware/page.tsx apps/web/components/operations/operations-console.tsx apps/web/components/dashboard/list-filters.tsx apps/web/lib/persistent-state.ts docs/NEXT_STEPS.md docs/IMPLEMENTATION_STATUS.md
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+git diff --check -- apps/web/app/plants/page.tsx apps/web/app/zones/page.tsx apps/web/app/devices/page.tsx apps/web/app/images/page.tsx apps/web/app/firmware/page.tsx apps/web/components/operations/operations-console.tsx apps/web/components/dashboard/list-filters.tsx apps/web/lib/persistent-state.ts docs/NEXT_STEPS.md docs/IMPLEMENTATION_STATUS.md
+```
+
 ## STEP 22 - Sensor Calibration Wizard
 
 Aggiunta una procedura guidata minima dentro il pannello calibrazioni.

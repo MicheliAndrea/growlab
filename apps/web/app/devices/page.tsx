@@ -15,8 +15,15 @@ import {
   ToggleRight,
 } from "lucide-react";
 import Link from "next/link";
+import { useMemo } from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  ListFilterBar,
+  SearchFilter,
+  SelectFilter,
+  uniqueFilterOptions,
+} from "@/components/dashboard/list-filters";
 import {
   DataNotice,
   DataPanel,
@@ -38,11 +45,24 @@ import {
   queryKeys,
   updateDeviceCapabilityEntry,
 } from "@/lib/queries";
+import { usePersistentStringState } from "@/lib/persistent-state";
 
 const poll = 30_000;
 
 export default function DevicesPage() {
   const queryClient = useQueryClient();
+  const [deviceSearch, setDeviceSearch] = usePersistentStringState(
+    "devices.search",
+    "",
+  );
+  const [statusFilter, setStatusFilter] = usePersistentStringState(
+    "devices.status",
+    "all",
+  );
+  const [typeFilter, setTypeFilter] = usePersistentStringState(
+    "devices.type",
+    "all",
+  );
   const devices = useQuery({
     queryKey: queryKeys.devices,
     queryFn: fetchDevices,
@@ -78,6 +98,54 @@ export default function DevicesPage() {
   );
   const onlineDevices =
     devices.data?.filter((device) => device.status === "online").length ?? 0;
+  const statusOptions = useMemo(
+    () =>
+      uniqueFilterOptions(
+        (devices.data ?? []).map((device) => device.status),
+        "All statuses",
+      ),
+    [devices.data],
+  );
+  const typeOptions = useMemo(
+    () =>
+      uniqueFilterOptions(
+        (devices.data ?? []).map((device) => device.deviceType),
+        "All types",
+      ),
+    [devices.data],
+  );
+  const filteredDevices = useMemo(() => {
+    const search = deviceSearch.trim().toLowerCase();
+
+    return (devices.data ?? []).filter((device) => {
+      const matchesSearch =
+        search.length === 0 ||
+        [
+          device.name,
+          device.deviceUid,
+          device.deviceType,
+          device.status,
+          device.firmwareVersion,
+          device.zoneId,
+        ].some((value) => value?.toLowerCase().includes(search));
+      const matchesStatus =
+        statusFilter === "all" || device.status === statusFilter;
+      const matchesType =
+        typeFilter === "all" || device.deviceType === typeFilter;
+
+      return matchesSearch && matchesStatus && matchesType;
+    });
+  }, [deviceSearch, devices.data, statusFilter, typeFilter]);
+  const visibleDeviceIds = new Set(filteredDevices.map((device) => device.id));
+  const visibleCapabilityRows = capabilityQueries.flatMap((query, index) => {
+    const device = devices.data?.[index];
+
+    if (!device || !visibleDeviceIds.has(device.id)) {
+      return [];
+    }
+
+    return (query.data ?? []).map((capability) => ({ capability, device }));
+  });
 
   return (
     <div className="grid gap-6">
@@ -90,8 +158,8 @@ export default function DevicesPage() {
           <ExportButton
             jsonFilename="devices.json"
             csvFilename="devices.csv"
-            data={devices.data ?? []}
-            csvRows={(devices.data ?? []).map((device) => ({
+            data={filteredDevices}
+            csvRows={filteredDevices.map((device) => ({
               id: device.id,
               name: device.name,
               deviceUid: device.deviceUid,
@@ -114,7 +182,7 @@ export default function DevicesPage() {
         </div>
       </PageHeader>
 
-      <section className="grid gap-3 md:grid-cols-3">
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           title="Devices"
           value={devices.data?.length ?? 0}
@@ -134,15 +202,54 @@ export default function DevicesPage() {
           detail="Device capability rows"
           icon={ShieldCheck}
         />
+        <MetricCard
+          title="Visible"
+          value={filteredDevices.length}
+          detail="After list filters"
+          icon={Cpu}
+        />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <DataPanel title="Devices" description="Current device records.">
+          <ListFilterBar
+            hasActiveFilters={
+              deviceSearch !== "" ||
+              statusFilter !== "all" ||
+              typeFilter !== "all"
+            }
+            onReset={() => {
+              setDeviceSearch("");
+              setStatusFilter("all");
+              setTypeFilter("all");
+            }}
+            resultCount={filteredDevices.length}
+            totalCount={devices.data?.length ?? 0}
+          >
+            <SearchFilter
+              label="Search devices"
+              placeholder="Search devices"
+              value={deviceSearch}
+              onValueChange={setDeviceSearch}
+            />
+            <SelectFilter
+              label="Filter device status"
+              value={statusFilter}
+              onValueChange={setStatusFilter}
+              options={statusOptions}
+            />
+            <SelectFilter
+              label="Filter device type"
+              value={typeFilter}
+              onValueChange={setTypeFilter}
+              options={typeOptions}
+            />
+          </ListFilterBar>
           {devices.isLoading ? <DataNotice state="loading" /> : null}
           {devices.isError ? <DataNotice state="error" /> : null}
-          {devices.data && devices.data.length > 0 ? (
+          {filteredDevices.length > 0 ? (
             <RowList>
-              {devices.data.map((device) => (
+              {filteredDevices.map((device) => (
                 <Row
                   key={device.id}
                   title={device.name}
@@ -158,8 +265,12 @@ export default function DevicesPage() {
                 </Row>
               ))}
             </RowList>
-          ) : !devices.isLoading && !devices.isError ? (
-            <EmptyState title="No devices" />
+          ) : !devices.isLoading && !devices.isError && devices.data ? (
+            <EmptyState
+              title={
+                devices.data.length > 0 ? "No matching devices" : "No devices"
+              }
+            />
           ) : null}
         </DataPanel>
 
@@ -176,43 +287,44 @@ export default function DevicesPage() {
           !capabilityQueries.some((query) => query.isLoading) ? (
             <EmptyState title="No capabilities" />
           ) : null}
-          {capabilityCount > 0 ? (
+          {capabilityCount > 0 && visibleCapabilityRows.length === 0 ? (
+            <EmptyState title="No capabilities for visible devices" />
+          ) : null}
+          {visibleCapabilityRows.length > 0 ? (
             <RowList>
-              {capabilityQueries.flatMap((query, index) =>
-                (query.data ?? []).map((capability) => (
-                  <Row
-                    key={capability.id}
-                    title={capability.capabilityKey}
-                    detail={devices.data?.[index]?.name}
-                    meta={
-                      <StatusBadge
-                        value={capability.enabled ? "active" : "offline"}
-                      />
+              {visibleCapabilityRows.map(({ capability, device }) => (
+                <Row
+                  key={capability.id}
+                  title={capability.capabilityKey}
+                  detail={device.name}
+                  meta={
+                    <StatusBadge
+                      value={capability.enabled ? "active" : "offline"}
+                    />
+                  }
+                >
+                  <Button
+                    disabled={capabilityMutation.isPending}
+                    onClick={() =>
+                      capabilityMutation.mutate({
+                        deviceId: capability.deviceId,
+                        capabilityId: capability.id,
+                        enabled: !capability.enabled,
+                      })
                     }
+                    size="sm"
+                    type="button"
+                    variant="outline"
                   >
-                    <Button
-                      disabled={capabilityMutation.isPending}
-                      onClick={() =>
-                        capabilityMutation.mutate({
-                          deviceId: capability.deviceId,
-                          capabilityId: capability.id,
-                          enabled: !capability.enabled,
-                        })
-                      }
-                      size="sm"
-                      type="button"
-                      variant="outline"
-                    >
-                      {capability.enabled ? (
-                        <ToggleLeft className="h-4 w-4" aria-hidden="true" />
-                      ) : (
-                        <ToggleRight className="h-4 w-4" aria-hidden="true" />
-                      )}
-                      {capability.enabled ? "Disable" : "Enable"}
-                    </Button>
-                  </Row>
-                )),
-              )}
+                    {capability.enabled ? (
+                      <ToggleLeft className="h-4 w-4" aria-hidden="true" />
+                    ) : (
+                      <ToggleRight className="h-4 w-4" aria-hidden="true" />
+                    )}
+                    {capability.enabled ? "Disable" : "Enable"}
+                  </Button>
+                </Row>
+              ))}
             </RowList>
           ) : null}
         </DataPanel>

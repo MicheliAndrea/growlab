@@ -5,6 +5,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, PlusCircle, RefreshCcw } from "lucide-react";
 
 import {
+  ListFilterBar,
+  SearchFilter,
+  SelectFilter,
+  uniqueFilterOptions,
+} from "@/components/dashboard/list-filters";
+import {
   DataNotice,
   DataPanel,
   EmptyState,
@@ -20,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { usePersistentStringState } from "@/lib/persistent-state";
 import {
   acknowledgeSystemAlertEntry,
   createAutomationRuleEntry,
@@ -60,6 +67,18 @@ const severityOptions: SystemSeverity[] = [
 export function OperationsConsole() {
   const queryClient = useQueryClient();
   const [selectedRuleId, setSelectedRuleId] = React.useState("");
+  const [alertSearch, setAlertSearch] = usePersistentStringState(
+    "operations.alerts.search",
+    "",
+  );
+  const [alertSeverityFilter, setAlertSeverityFilter] =
+    usePersistentStringState("operations.alerts.severity", "all");
+  const [eventSearch, setEventSearch] = usePersistentStringState(
+    "operations.events.search",
+    "",
+  );
+  const [eventSeverityFilter, setEventSeverityFilter] =
+    usePersistentStringState("operations.events.severity", "all");
   const activeAlerts = useQuery({
     queryKey: queryKeys.systemAlerts("active"),
     queryFn: () => fetchSystemAlerts("active"),
@@ -90,6 +109,52 @@ export function OperationsConsole() {
   const ruleCount = rules.data?.length ?? 0;
   const criticalCount =
     events.data?.filter((event) => event.severity === "critical").length ?? 0;
+  const alertSeverityOptions = React.useMemo(
+    () =>
+      uniqueFilterOptions(
+        (activeAlerts.data ?? []).map((alert) => alert.severity),
+        "All severities",
+      ),
+    [activeAlerts.data],
+  );
+  const eventSeverityOptions = React.useMemo(
+    () =>
+      uniqueFilterOptions(
+        (events.data ?? []).map((event) => event.severity),
+        "All severities",
+      ),
+    [events.data],
+  );
+  const filteredAlerts = React.useMemo(() => {
+    const search = alertSearch.trim().toLowerCase();
+
+    return (activeAlerts.data ?? []).filter((alert) => {
+      const matchesSearch =
+        search.length === 0 ||
+        [alert.title, alert.message, alert.source, alert.status].some((value) =>
+          value?.toLowerCase().includes(search),
+        );
+      const matchesSeverity =
+        alertSeverityFilter === "all" || alert.severity === alertSeverityFilter;
+
+      return matchesSearch && matchesSeverity;
+    });
+  }, [activeAlerts.data, alertSearch, alertSeverityFilter]);
+  const filteredEvents = React.useMemo(() => {
+    const search = eventSearch.trim().toLowerCase();
+
+    return (events.data ?? []).filter((event) => {
+      const matchesSearch =
+        search.length === 0 ||
+        [event.eventType, event.message, event.source].some((value) =>
+          value?.toLowerCase().includes(search),
+        );
+      const matchesSeverity =
+        eventSeverityFilter === "all" || event.severity === eventSeverityFilter;
+
+      return matchesSearch && matchesSeverity;
+    });
+  }, [eventSearch, eventSeverityFilter, events.data]);
 
   const acknowledgeMutation = useMutation({
     mutationFn: (id: string) =>
@@ -247,11 +312,35 @@ export function OperationsConsole() {
 
       <section className="grid gap-4 xl:grid-cols-[1fr_1.1fr]">
         <DataPanel title="Active alerts" description="Current alert queue.">
+          <ListFilterBar
+            hasActiveFilters={
+              alertSearch !== "" || alertSeverityFilter !== "all"
+            }
+            onReset={() => {
+              setAlertSearch("");
+              setAlertSeverityFilter("all");
+            }}
+            resultCount={filteredAlerts.length}
+            totalCount={activeAlerts.data?.length ?? 0}
+          >
+            <SearchFilter
+              label="Search alerts"
+              placeholder="Search alerts"
+              value={alertSearch}
+              onValueChange={setAlertSearch}
+            />
+            <SelectFilter
+              label="Filter alert severity"
+              value={alertSeverityFilter}
+              onValueChange={setAlertSeverityFilter}
+              options={alertSeverityOptions}
+            />
+          </ListFilterBar>
           {activeAlerts.isLoading ? <DataNotice state="loading" /> : null}
           {activeAlerts.isError ? <DataNotice state="error" /> : null}
-          {activeAlerts.data && activeAlerts.data.length > 0 ? (
+          {filteredAlerts.length > 0 ? (
             <RowList>
-              {activeAlerts.data.map((alert) => (
+              {filteredAlerts.map((alert) => (
                 <Row
                   key={alert.id}
                   title={alert.title}
@@ -278,20 +367,50 @@ export function OperationsConsole() {
                 </Row>
               ))}
             </RowList>
-          ) : !activeAlerts.isLoading && !activeAlerts.isError ? (
+          ) : !activeAlerts.isLoading &&
+            !activeAlerts.isError &&
+            activeAlerts.data ? (
             <EmptyState
-              title="No active alerts"
+              title={
+                activeAlerts.data.length > 0
+                  ? "No matching alerts"
+                  : "No active alerts"
+              }
               detail="Manual alert creation appears above."
             />
           ) : null}
         </DataPanel>
 
         <DataPanel title="Recent events" description="Event stream.">
+          <ListFilterBar
+            hasActiveFilters={
+              eventSearch !== "" || eventSeverityFilter !== "all"
+            }
+            onReset={() => {
+              setEventSearch("");
+              setEventSeverityFilter("all");
+            }}
+            resultCount={filteredEvents.length}
+            totalCount={events.data?.length ?? 0}
+          >
+            <SearchFilter
+              label="Search events"
+              placeholder="Search events"
+              value={eventSearch}
+              onValueChange={setEventSearch}
+            />
+            <SelectFilter
+              label="Filter event severity"
+              value={eventSeverityFilter}
+              onValueChange={setEventSeverityFilter}
+              options={eventSeverityOptions}
+            />
+          </ListFilterBar>
           {events.isLoading ? <DataNotice state="loading" /> : null}
           {events.isError ? <DataNotice state="error" /> : null}
-          {events.data && events.data.length > 0 ? (
+          {filteredEvents.length > 0 ? (
             <RowList>
-              {events.data.slice(0, 12).map((event) => (
+              {filteredEvents.slice(0, 12).map((event) => (
                 <Row
                   key={event.id}
                   title={event.eventType}
@@ -304,9 +423,13 @@ export function OperationsConsole() {
                 </Row>
               ))}
             </RowList>
-          ) : !events.isLoading && !events.isError ? (
+          ) : !events.isLoading && !events.isError && events.data ? (
             <EmptyState
-              title="No system events"
+              title={
+                events.data.length > 0
+                  ? "No matching events"
+                  : "No system events"
+              }
               detail="Manual events appear above."
             />
           ) : null}

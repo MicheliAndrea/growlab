@@ -51,6 +51,18 @@ docker compose -f infrastructure/docker/docker-compose.yml up -d
 ## db-host Database
 
 - PostgreSQL/TimescaleDB is external to the app compose.
+- Inspect the configured target before applying changes.
+
+```bash
+make db-config
+```
+
+- Check read-only connectivity and SSL details.
+
+```bash
+make db-check
+```
+
 - Run goose migrations from the app repository with the real database `.env`.
 
 ```bash

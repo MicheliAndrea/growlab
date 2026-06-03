@@ -8,10 +8,18 @@ import {
   RefreshCcw,
   Rocket,
 } from "lucide-react";
+import { useMemo } from "react";
 
 import { FirmwareUploadForm } from "@/components/firmware/firmware-upload-form";
 import { OtaControlPanel } from "@/components/firmware/ota-control-panel";
 import { Button } from "@/components/ui/button";
+import {
+  ListFilterBar,
+  SearchFilter,
+  SelectFilter,
+  type FilterOption,
+  uniqueFilterOptions,
+} from "@/components/dashboard/list-filters";
 import {
   DataNotice,
   DataPanel,
@@ -32,11 +40,24 @@ import {
   setFirmwareChannelDefaultEntry,
 } from "@/lib/queries";
 import { firmwareFileUrl } from "@/lib/api";
+import { usePersistentStringState } from "@/lib/persistent-state";
 
 const poll = 30_000;
 
 export default function FirmwarePage() {
   const queryClient = useQueryClient();
+  const [firmwareSearch, setFirmwareSearch] = usePersistentStringState(
+    "firmware.search",
+    "",
+  );
+  const [deviceTypeFilter, setDeviceTypeFilter] = usePersistentStringState(
+    "firmware.deviceType",
+    "all",
+  );
+  const [channelFilter, setChannelFilter] = usePersistentStringState(
+    "firmware.channel",
+    "all",
+  );
   const versions = useQuery({
     queryKey: queryKeys.firmwareVersions,
     queryFn: fetchFirmwareVersions,
@@ -65,6 +86,66 @@ export default function FirmwarePage() {
   });
   const defaultChannels =
     channels.data?.filter((channel) => channel.isDefault).length ?? 0;
+  const channelNameById = useMemo(
+    () =>
+      new Map(
+        (channels.data ?? []).map((channel) => [channel.id, channel.name]),
+      ),
+    [channels.data],
+  );
+  const deviceTypeOptions = useMemo(
+    () =>
+      uniqueFilterOptions(
+        (versions.data ?? []).map((version) => version.deviceType),
+        "All device types",
+      ),
+    [versions.data],
+  );
+  const channelOptions = useMemo<FilterOption[]>(() => {
+    const hasUnassigned = (versions.data ?? []).some(
+      (version) => !version.channelId,
+    );
+
+    return [
+      { label: "All channels", value: "all" },
+      ...(channels.data ?? []).map((channel) => ({
+        label: channel.name,
+        value: channel.id,
+      })),
+      ...(hasUnassigned ? [{ label: "unassigned", value: "unassigned" }] : []),
+    ];
+  }, [channels.data, versions.data]);
+  const filteredVersions = useMemo(() => {
+    const search = firmwareSearch.trim().toLowerCase();
+
+    return (versions.data ?? []).filter((version) => {
+      const channelName = version.channelId
+        ? channelNameById.get(version.channelId)
+        : "unassigned";
+      const matchesSearch =
+        search.length === 0 ||
+        [
+          version.version,
+          version.deviceType,
+          version.channelId,
+          channelName,
+        ].some((value) => value?.toLowerCase().includes(search));
+      const matchesDeviceType =
+        deviceTypeFilter === "all" || version.deviceType === deviceTypeFilter;
+      const matchesChannel =
+        channelFilter === "all" ||
+        (channelFilter === "unassigned" && !version.channelId) ||
+        version.channelId === channelFilter;
+
+      return matchesSearch && matchesDeviceType && matchesChannel;
+    });
+  }, [
+    channelFilter,
+    channelNameById,
+    deviceTypeFilter,
+    firmwareSearch,
+    versions.data,
+  ]);
 
   return (
     <div className="grid gap-6">
@@ -77,8 +158,8 @@ export default function FirmwarePage() {
           <ExportButton
             jsonFilename="firmware-versions.json"
             csvFilename="firmware-versions.csv"
-            data={versions.data ?? []}
-            csvRows={(versions.data ?? []).map((version) => ({
+            data={filteredVersions}
+            csvRows={filteredVersions.map((version) => ({
               id: version.id,
               version: version.version,
               deviceType: version.deviceType,
@@ -97,7 +178,7 @@ export default function FirmwarePage() {
         </div>
       </PageHeader>
 
-      <section className="grid gap-3 md:grid-cols-3">
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           title="Versions"
           value={versions.data?.length ?? 0}
@@ -116,6 +197,12 @@ export default function FirmwarePage() {
           detail="Default release channel"
           icon={Rocket}
           tone={defaultChannels > 0 ? "success" : "secondary"}
+        />
+        <MetricCard
+          title="Visible"
+          value={filteredVersions.length}
+          detail="After list filters"
+          icon={Package}
         />
       </section>
 
@@ -137,11 +224,44 @@ export default function FirmwarePage() {
 
       <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <DataPanel title="Versions" description="Firmware artifact registry.">
+          <ListFilterBar
+            hasActiveFilters={
+              firmwareSearch !== "" ||
+              deviceTypeFilter !== "all" ||
+              channelFilter !== "all"
+            }
+            onReset={() => {
+              setFirmwareSearch("");
+              setDeviceTypeFilter("all");
+              setChannelFilter("all");
+            }}
+            resultCount={filteredVersions.length}
+            totalCount={versions.data?.length ?? 0}
+          >
+            <SearchFilter
+              label="Search firmware"
+              placeholder="Search firmware"
+              value={firmwareSearch}
+              onValueChange={setFirmwareSearch}
+            />
+            <SelectFilter
+              label="Filter firmware device type"
+              value={deviceTypeFilter}
+              onValueChange={setDeviceTypeFilter}
+              options={deviceTypeOptions}
+            />
+            <SelectFilter
+              label="Filter firmware channel"
+              value={channelFilter}
+              onValueChange={setChannelFilter}
+              options={channelOptions}
+            />
+          </ListFilterBar>
           {versions.isLoading ? <DataNotice state="loading" /> : null}
           {versions.isError ? <DataNotice state="error" /> : null}
-          {versions.data && versions.data.length > 0 ? (
+          {filteredVersions.length > 0 ? (
             <RowList>
-              {versions.data.map((version) => (
+              {filteredVersions.map((version) => (
                 <Row
                   key={version.id}
                   title={version.version}
@@ -149,7 +269,14 @@ export default function FirmwarePage() {
                     version.createdAt,
                   )}`}
                   meta={
-                    <StatusBadge value={version.channelId ?? "unassigned"} />
+                    <StatusBadge
+                      value={
+                        version.channelId
+                          ? (channelNameById.get(version.channelId) ??
+                            version.channelId)
+                          : "unassigned"
+                      }
+                    />
                   }
                 >
                   <Button asChild size="sm" variant="outline">
@@ -161,8 +288,14 @@ export default function FirmwarePage() {
                 </Row>
               ))}
             </RowList>
-          ) : !versions.isLoading && !versions.isError ? (
-            <EmptyState title="No firmware versions" />
+          ) : !versions.isLoading && !versions.isError && versions.data ? (
+            <EmptyState
+              title={
+                versions.data.length > 0
+                  ? "No matching firmware versions"
+                  : "No firmware versions"
+              }
+            />
           ) : null}
         </DataPanel>
 
