@@ -16,6 +16,8 @@ import {
   createOtaDryRun,
   createOtaJob,
   evaluateAutomationRule,
+  getAutomationContext,
+  runAutomationScheduler,
   resolveSystemAlert,
   setFirmwareChannelDefault,
   updateDeviceCapability,
@@ -56,6 +58,8 @@ import {
   listSystemEvents,
   listZones,
   listZoneProfiles,
+  previewDeviceProvisioningClaim,
+  type AutomationSchedulerRunResult,
   type AutomationRule,
   type AutomationRuleCreateRequest,
   type AutomationRuleEvaluation,
@@ -485,6 +489,20 @@ export async function fetchAutomationRules(): Promise<AutomationRule[]> {
   return expectData(await listAutomationRules());
 }
 
+export async function fetchAutomationContext(): Promise<
+  Record<string, unknown>
+> {
+  return expectData(await getAutomationContext());
+}
+
+export async function runAutomationSchedulerEntry(
+  limit?: number,
+): Promise<AutomationSchedulerRunResult[]> {
+  return expectData(
+    await runAutomationScheduler(limit ? { limit } : undefined),
+  );
+}
+
 export async function createAutomationRuleEntry(
   request: AutomationRuleCreateRequest,
 ): Promise<AutomationRule> {
@@ -511,6 +529,16 @@ export async function evaluateAutomationRuleEntry(
 ): Promise<AutomationRuleEvaluation> {
   const response = await evaluateAutomationRule(ruleId, request);
   if (response.status !== 201) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+  return response.data;
+}
+
+export async function previewDeviceProvisioningClaimEntry(
+  token: string,
+): Promise<DeviceProvisioningConfig> {
+  const response = await previewDeviceProvisioningClaim({ token });
+  if (response.status !== 200) {
     throw new Error(`API request failed with status ${response.status}`);
   }
   return response.data;

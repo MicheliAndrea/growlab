@@ -11,6 +11,7 @@ type Config struct {
 	Env                         string
 	APIAddr                     string
 	PublicAPIURL                string
+	PublicWebURL                string
 	ShutdownTimeout             time.Duration
 	PostgresDSN                 string
 	RedisAddr                   string
@@ -25,6 +26,9 @@ type Config struct {
 	FirmwareStoragePath         string
 	FirmwareUploadMaxBytes      int64
 	ShellyTimeout               time.Duration
+	RulesSchedulerEnabled       bool
+	RulesSchedulerTick          time.Duration
+	RulesSchedulerBatchLimit    int
 	FeatureIrrigationManual     bool
 	FeatureIrrigationAutomation bool
 }
@@ -34,6 +38,7 @@ func Load() Config {
 		Env:                         env("GROWLAB_ENV", "development"),
 		APIAddr:                     env("GROWLAB_API_ADDR", ":8080"),
 		PublicAPIURL:                env("GROWLAB_PUBLIC_API_URL", "http://localhost:8080"),
+		PublicWebURL:                env("GROWLAB_PUBLIC_WEB_URL", "http://localhost:3000"),
 		ShutdownTimeout:             envDuration("GROWLAB_SHUTDOWN_TIMEOUT", 10*time.Second),
 		PostgresDSN:                 postgresDSN(),
 		RedisAddr:                   env("GROWLAB_REDIS_ADDR", ""),
@@ -48,6 +53,9 @@ func Load() Config {
 		FirmwareStoragePath:         env("GROWLAB_FIRMWARE_STORAGE_PATH", "./storage/firmware"),
 		FirmwareUploadMaxBytes:      envInt64("GROWLAB_FIRMWARE_UPLOAD_MAX_BYTES", 32*1024*1024),
 		ShellyTimeout:               envDuration("GROWLAB_SHELLY_TIMEOUT", 3*time.Second),
+		RulesSchedulerEnabled:       envBool("GROWLAB_RULES_SCHEDULER_ENABLED", false),
+		RulesSchedulerTick:          envDuration("GROWLAB_RULES_SCHEDULER_TICK", 30*time.Second),
+		RulesSchedulerBatchLimit:    envInt("GROWLAB_RULES_SCHEDULER_BATCH_LIMIT", 25),
 		FeatureIrrigationManual:     envBool("GROWLAB_FEATURE_IRRIGATION_MANUAL", false),
 		FeatureIrrigationAutomation: envBool("GROWLAB_FEATURE_IRRIGATION_AUTOMATION", false),
 	}

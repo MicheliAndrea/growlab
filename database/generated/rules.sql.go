@@ -20,22 +20,37 @@ INSERT INTO automation_rules (
   severity,
   condition_config,
   action_config,
-  metadata
+  metadata,
+  trigger_mode,
+  schedule_interval_seconds,
+  scheduler_commit,
+  cooldown_seconds,
+  next_run_at
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8
+  $1, $2, $3, $4, $5, $6, $7, $8,
+  COALESCE($9, 'manual'),
+  $10,
+  COALESCE($11, false),
+  COALESCE($12, 0),
+  $13
 )
-RETURNING id, name, slug, description, enabled, severity, condition_config, action_config, metadata, last_evaluated_at, last_matched_at, created_at, updated_at
+RETURNING id, name, slug, description, enabled, severity, condition_config, action_config, metadata, last_evaluated_at, last_matched_at, created_at, updated_at, trigger_mode, schedule_interval_seconds, scheduler_commit, cooldown_seconds, next_run_at, last_scheduler_run_at, scheduler_status, scheduler_error
 `
 
 type CreateAutomationRuleParams struct {
-	Name            string      `db:"name" json:"name"`
-	Slug            string      `db:"slug" json:"slug"`
-	Description     pgtype.Text `db:"description" json:"description"`
-	Enabled         bool        `db:"enabled" json:"enabled"`
-	Severity        string      `db:"severity" json:"severity"`
-	ConditionConfig []byte      `db:"condition_config" json:"condition_config"`
-	ActionConfig    []byte      `db:"action_config" json:"action_config"`
-	Metadata        []byte      `db:"metadata" json:"metadata"`
+	Name                    string             `db:"name" json:"name"`
+	Slug                    string             `db:"slug" json:"slug"`
+	Description             pgtype.Text        `db:"description" json:"description"`
+	Enabled                 bool               `db:"enabled" json:"enabled"`
+	Severity                string             `db:"severity" json:"severity"`
+	ConditionConfig         []byte             `db:"condition_config" json:"condition_config"`
+	ActionConfig            []byte             `db:"action_config" json:"action_config"`
+	Metadata                []byte             `db:"metadata" json:"metadata"`
+	Column9                 interface{}        `db:"column_9" json:"column_9"`
+	ScheduleIntervalSeconds pgtype.Int4        `db:"schedule_interval_seconds" json:"schedule_interval_seconds"`
+	Column11                interface{}        `db:"column_11" json:"column_11"`
+	Column12                interface{}        `db:"column_12" json:"column_12"`
+	NextRunAt               pgtype.Timestamptz `db:"next_run_at" json:"next_run_at"`
 }
 
 func (q *Queries) CreateAutomationRule(ctx context.Context, arg CreateAutomationRuleParams) (AutomationRule, error) {
@@ -48,6 +63,11 @@ func (q *Queries) CreateAutomationRule(ctx context.Context, arg CreateAutomation
 		arg.ConditionConfig,
 		arg.ActionConfig,
 		arg.Metadata,
+		arg.Column9,
+		arg.ScheduleIntervalSeconds,
+		arg.Column11,
+		arg.Column12,
+		arg.NextRunAt,
 	)
 	var i AutomationRule
 	err := row.Scan(
@@ -64,6 +84,14 @@ func (q *Queries) CreateAutomationRule(ctx context.Context, arg CreateAutomation
 		&i.LastMatchedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TriggerMode,
+		&i.ScheduleIntervalSeconds,
+		&i.SchedulerCommit,
+		&i.CooldownSeconds,
+		&i.NextRunAt,
+		&i.LastSchedulerRunAt,
+		&i.SchedulerStatus,
+		&i.SchedulerError,
 	)
 	return i, err
 }
@@ -120,7 +148,7 @@ func (q *Queries) CreateAutomationRuleEvaluation(ctx context.Context, arg Create
 }
 
 const getAutomationRule = `-- name: GetAutomationRule :one
-SELECT id, name, slug, description, enabled, severity, condition_config, action_config, metadata, last_evaluated_at, last_matched_at, created_at, updated_at
+SELECT id, name, slug, description, enabled, severity, condition_config, action_config, metadata, last_evaluated_at, last_matched_at, created_at, updated_at, trigger_mode, schedule_interval_seconds, scheduler_commit, cooldown_seconds, next_run_at, last_scheduler_run_at, scheduler_status, scheduler_error
 FROM automation_rules
 WHERE id = $1
 `
@@ -142,6 +170,14 @@ func (q *Queries) GetAutomationRule(ctx context.Context, id pgtype.UUID) (Automa
 		&i.LastMatchedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TriggerMode,
+		&i.ScheduleIntervalSeconds,
+		&i.SchedulerCommit,
+		&i.CooldownSeconds,
+		&i.NextRunAt,
+		&i.LastSchedulerRunAt,
+		&i.SchedulerStatus,
+		&i.SchedulerError,
 	)
 	return i, err
 }
@@ -191,7 +227,7 @@ func (q *Queries) ListAutomationRuleEvaluations(ctx context.Context, arg ListAut
 }
 
 const listAutomationRules = `-- name: ListAutomationRules :many
-SELECT id, name, slug, description, enabled, severity, condition_config, action_config, metadata, last_evaluated_at, last_matched_at, created_at, updated_at
+SELECT id, name, slug, description, enabled, severity, condition_config, action_config, metadata, last_evaluated_at, last_matched_at, created_at, updated_at, trigger_mode, schedule_interval_seconds, scheduler_commit, cooldown_seconds, next_run_at, last_scheduler_run_at, scheduler_status, scheduler_error
 FROM automation_rules
 ORDER BY enabled DESC, updated_at DESC, name
 `
@@ -219,6 +255,14 @@ func (q *Queries) ListAutomationRules(ctx context.Context) ([]AutomationRule, er
 			&i.LastMatchedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.TriggerMode,
+			&i.ScheduleIntervalSeconds,
+			&i.SchedulerCommit,
+			&i.CooldownSeconds,
+			&i.NextRunAt,
+			&i.LastSchedulerRunAt,
+			&i.SchedulerStatus,
+			&i.SchedulerError,
 		); err != nil {
 			return nil, err
 		}
@@ -228,4 +272,106 @@ func (q *Queries) ListAutomationRules(ctx context.Context) ([]AutomationRule, er
 		return nil, err
 	}
 	return items, nil
+}
+
+const listDueScheduledAutomationRules = `-- name: ListDueScheduledAutomationRules :many
+SELECT id, name, slug, description, enabled, severity, condition_config, action_config, metadata, last_evaluated_at, last_matched_at, created_at, updated_at, trigger_mode, schedule_interval_seconds, scheduler_commit, cooldown_seconds, next_run_at, last_scheduler_run_at, scheduler_status, scheduler_error
+FROM automation_rules
+WHERE enabled = true
+  AND trigger_mode = 'scheduled'
+  AND COALESCE(schedule_interval_seconds, 0) > 0
+  AND (next_run_at IS NULL OR next_run_at <= now())
+ORDER BY next_run_at NULLS FIRST, updated_at
+LIMIT $1
+`
+
+func (q *Queries) ListDueScheduledAutomationRules(ctx context.Context, limit int32) ([]AutomationRule, error) {
+	rows, err := q.db.Query(ctx, listDueScheduledAutomationRules, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AutomationRule{}
+	for rows.Next() {
+		var i AutomationRule
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.Enabled,
+			&i.Severity,
+			&i.ConditionConfig,
+			&i.ActionConfig,
+			&i.Metadata,
+			&i.LastEvaluatedAt,
+			&i.LastMatchedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.TriggerMode,
+			&i.ScheduleIntervalSeconds,
+			&i.SchedulerCommit,
+			&i.CooldownSeconds,
+			&i.NextRunAt,
+			&i.LastSchedulerRunAt,
+			&i.SchedulerStatus,
+			&i.SchedulerError,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateAutomationRuleScheduleState = `-- name: UpdateAutomationRuleScheduleState :one
+UPDATE automation_rules
+SET last_scheduler_run_at = now(),
+    next_run_at = CASE
+      WHEN schedule_interval_seconds IS NULL THEN NULL
+      ELSE now() + make_interval(secs => schedule_interval_seconds)
+    END,
+    scheduler_status = $2,
+    scheduler_error = $3,
+    updated_at = now()
+WHERE id = $1
+RETURNING id, name, slug, description, enabled, severity, condition_config, action_config, metadata, last_evaluated_at, last_matched_at, created_at, updated_at, trigger_mode, schedule_interval_seconds, scheduler_commit, cooldown_seconds, next_run_at, last_scheduler_run_at, scheduler_status, scheduler_error
+`
+
+type UpdateAutomationRuleScheduleStateParams struct {
+	ID              pgtype.UUID `db:"id" json:"id"`
+	SchedulerStatus string      `db:"scheduler_status" json:"scheduler_status"`
+	SchedulerError  pgtype.Text `db:"scheduler_error" json:"scheduler_error"`
+}
+
+func (q *Queries) UpdateAutomationRuleScheduleState(ctx context.Context, arg UpdateAutomationRuleScheduleStateParams) (AutomationRule, error) {
+	row := q.db.QueryRow(ctx, updateAutomationRuleScheduleState, arg.ID, arg.SchedulerStatus, arg.SchedulerError)
+	var i AutomationRule
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.Enabled,
+		&i.Severity,
+		&i.ConditionConfig,
+		&i.ActionConfig,
+		&i.Metadata,
+		&i.LastEvaluatedAt,
+		&i.LastMatchedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TriggerMode,
+		&i.ScheduleIntervalSeconds,
+		&i.SchedulerCommit,
+		&i.CooldownSeconds,
+		&i.NextRunAt,
+		&i.LastSchedulerRunAt,
+		&i.SchedulerStatus,
+		&i.SchedulerError,
+	)
+	return i, err
 }

@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"growlab/apps/api/internal/automation"
 	"growlab/apps/api/internal/config"
 	"growlab/apps/api/internal/database"
 	"growlab/apps/api/internal/handlers"
@@ -60,19 +61,30 @@ func main() {
 		Date:    cfg.BuildDate,
 	})
 
+	domainService := services.NewDomainService(
+		repositories.New(postgresPool),
+		shelly.NewClient(cfg.ShellyTimeout),
+		cfg.PublicAPIURL,
+		cfg.PublicWebURL,
+		services.IrrigationSafetyConfig{
+			ManualFlagConfigured:     cfg.FeatureIrrigationManual,
+			AutomationFlagConfigured: cfg.FeatureIrrigationAutomation,
+		},
+	)
+	if cfg.RulesSchedulerEnabled {
+		go automation.NewScheduler(automation.SchedulerOptions{
+			Service: domainService,
+			Tick:    cfg.RulesSchedulerTick,
+			Limit:   cfg.RulesSchedulerBatchLimit,
+			Logger:  logger,
+		}).Start(ctx)
+	}
+
 	router := httpapi.NewRouter(httpapi.RouterOptions{
 		Config:  cfg,
 		Metrics: apiMetrics,
 		DomainHandler: handlers.NewDomainHandler(
-			services.NewDomainService(
-				repositories.New(postgresPool),
-				shelly.NewClient(cfg.ShellyTimeout),
-				cfg.PublicAPIURL,
-				services.IrrigationSafetyConfig{
-					ManualFlagConfigured:     cfg.FeatureIrrigationManual,
-					AutomationFlagConfigured: cfg.FeatureIrrigationAutomation,
-				},
-			),
+			domainService,
 			handlers.DomainHandlerOptions{
 				ImageStoragePath:       cfg.ImageStoragePath,
 				ImageUploadMaxBytes:    cfg.ImageUploadMaxBytes,

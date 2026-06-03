@@ -25,6 +25,7 @@ type DomainService struct {
 	repo         *repositories.Repository
 	shelly       *shelly.Client
 	publicAPIURL string
+	publicWebURL string
 	irrigation   IrrigationSafetyConfig
 }
 
@@ -33,11 +34,12 @@ type IrrigationSafetyConfig struct {
 	AutomationFlagConfigured bool
 }
 
-func NewDomainService(repo *repositories.Repository, shellyClient *shelly.Client, publicAPIURL string, irrigation IrrigationSafetyConfig) *DomainService {
+func NewDomainService(repo *repositories.Repository, shellyClient *shelly.Client, publicAPIURL string, publicWebURL string, irrigation IrrigationSafetyConfig) *DomainService {
 	return &DomainService{
 		repo:         repo,
 		shelly:       shellyClient,
 		publicAPIURL: strings.TrimRight(publicAPIURL, "/"),
+		publicWebURL: strings.TrimRight(publicWebURL, "/"),
 		irrigation:   irrigation,
 	}
 }
@@ -570,8 +572,26 @@ func (s *DomainService) CreateAutomationRule(ctx context.Context, body map[strin
 		slug = slugify(name)
 	}
 	return s.repo.QueryOne(ctx, `
-INSERT INTO automation_rules (name, slug, description, enabled, severity, condition_config, action_config, metadata)
-VALUES ($1, $2, $3, $4, COALESCE($5, 'warning'), $6::jsonb, $7::jsonb, $8::jsonb)
+INSERT INTO automation_rules (
+  name,
+  slug,
+  description,
+  enabled,
+  severity,
+  condition_config,
+  action_config,
+  metadata,
+  trigger_mode,
+  schedule_interval_seconds,
+  scheduler_commit,
+  cooldown_seconds,
+  next_run_at
+)
+VALUES (
+  $1, $2, $3, $4, COALESCE($5, 'warning'), $6::jsonb, $7::jsonb, $8::jsonb,
+  COALESCE($9, 'manual'), $10, $11, $12,
+  CASE WHEN COALESCE($9, 'manual') = 'scheduled' THEN COALESCE($13::timestamptz, now()) ELSE $13::timestamptz END
+)
 RETURNING *`,
 		name,
 		slug,
@@ -581,6 +601,11 @@ RETURNING *`,
 		jsonField(body, "conditionConfig"),
 		jsonField(body, "actionConfig"),
 		jsonField(body, "metadata"),
+		nullableString(body, "triggerMode"),
+		nullableInt(body, "scheduleIntervalSeconds"),
+		boolField(body, "schedulerCommit", false),
+		intField(body, "cooldownSeconds", 0),
+		nullableString(body, "nextRunAt"),
 	)
 }
 
@@ -601,8 +626,194 @@ func (s *DomainService) EvaluateAutomationRule(ctx context.Context, id string, b
 		return nil, err
 	}
 
-	evaluationContext := objectValue(body["evaluationContext"])
-	commit := boolField(body, "commit", false)
+	return s.evaluateAutomationRuleRecord(ctx, rule, id, objectValue(body["evaluationContext"]), boolField(body, "commit", false), nullableString(body, "evaluatedBy"))
+}
+
+func (s *DomainService) RunScheduledAutomationRules(ctx context.Context, limit int) ([]repositories.Record, error) {
+	if limit <= 0 {
+		limit = 25
+	}
+	var results []repositories.Record
+
+	err := s.repo.WithTx(ctx, func(txRepo *repositories.Repository) error {
+		txService := *s
+		txService.repo = txRepo
+
+		evaluationContext, err := txService.BuildAutomationEvaluationContext(ctx)
+		if err != nil {
+			return err
+		}
+
+		rules, err := txRepo.Query(ctx, `
+SELECT *
+FROM automation_rules
+WHERE enabled = true
+  AND trigger_mode = 'scheduled'
+  AND COALESCE(schedule_interval_seconds, 0) > 0
+  AND (next_run_at IS NULL OR next_run_at <= now())
+  AND (
+    COALESCE(cooldown_seconds, 0) = 0
+    OR last_matched_at IS NULL
+    OR last_matched_at <= now() - make_interval(secs => cooldown_seconds)
+  )
+ORDER BY next_run_at NULLS FIRST, updated_at
+LIMIT $1
+FOR UPDATE SKIP LOCKED`,
+			limit,
+		)
+		if err != nil {
+			return err
+		}
+
+		for _, rule := range rules {
+			ruleID := stringValue(rule["id"])
+			commit, _ := rule["schedulerCommit"].(bool)
+			evaluation, err := txService.evaluateAutomationRuleRecord(ctx, rule, ruleID, evaluationContext, commit, "rules-scheduler")
+			status := "failed"
+			schedulerError := any(nil)
+			if err != nil {
+				schedulerError = err.Error()
+				_, updateErr := txRepo.Exec(ctx, `
+UPDATE automation_rules
+SET last_scheduler_run_at = now(),
+    next_run_at = CASE
+      WHEN schedule_interval_seconds IS NULL THEN NULL
+      ELSE now() + make_interval(secs => schedule_interval_seconds)
+    END,
+    scheduler_status = 'failed',
+    scheduler_error = $2,
+    updated_at = now()
+WHERE id = $1::uuid`,
+					ruleID,
+					schedulerError,
+				)
+				if updateErr != nil {
+					return updateErr
+				}
+				results = append(results, repositories.Record{
+					"ruleId": ruleID,
+					"status": status,
+					"error":  schedulerError,
+				})
+				continue
+			}
+
+			if matched, _ := evaluation["matched"].(bool); matched {
+				status = "matched"
+			} else {
+				status = "not_matched"
+			}
+			_, err = txRepo.Exec(ctx, `
+UPDATE automation_rules
+SET last_scheduler_run_at = now(),
+    next_run_at = CASE
+      WHEN schedule_interval_seconds IS NULL THEN NULL
+      ELSE now() + make_interval(secs => schedule_interval_seconds)
+    END,
+    scheduler_status = $2,
+    scheduler_error = NULL,
+    updated_at = now()
+WHERE id = $1::uuid`,
+				ruleID,
+				status,
+			)
+			if err != nil {
+				return err
+			}
+			results = append(results, repositories.Record{
+				"ruleId":       ruleID,
+				"status":       status,
+				"evaluationId": evaluation["id"],
+				"matched":      evaluation["matched"],
+			})
+		}
+
+		return nil
+	})
+
+	return results, err
+}
+
+func (s *DomainService) BuildAutomationEvaluationContext(ctx context.Context) (map[string]any, error) {
+	counts, err := s.repo.QueryOne(ctx, `
+SELECT
+  (SELECT count(*) FROM devices) AS devices_total,
+  (SELECT count(*) FROM devices WHERE status = 'online') AS devices_online,
+  (SELECT count(*) FROM devices WHERE status <> 'online') AS devices_offline,
+  (SELECT count(*) FROM plants) AS plants_total,
+  (SELECT count(*) FROM system_alerts WHERE status = 'active') AS active_alerts,
+  (SELECT count(*) FROM zones) AS zones_total`)
+	if err != nil {
+		return nil, err
+	}
+
+	plantHealthRows, err := s.repo.Query(ctx, `
+SELECT current_health_status AS status, count(*) AS count
+FROM plants
+GROUP BY current_health_status`)
+	if err != nil {
+		return nil, err
+	}
+	plantHealth := map[string]any{}
+	for _, row := range plantHealthRows {
+		plantHealth[stringValue(row["status"])] = row["count"]
+	}
+
+	latestTelemetryRows, err := s.repo.Query(ctx, `
+WITH latest AS (
+  SELECT DISTINCT ON (s.sensor_type)
+    s.sensor_type,
+    s.name AS sensor_name,
+    sr.value,
+    sr.unit,
+    sr.recorded_at,
+    z.name AS zone_name
+  FROM sensor_readings sr
+  JOIN sensors s ON s.id = sr.sensor_id
+  LEFT JOIN zones z ON z.id = sr.zone_id
+  ORDER BY s.sensor_type, sr.recorded_at DESC
+)
+SELECT * FROM latest`)
+	if err != nil {
+		return nil, err
+	}
+	latestTelemetry := map[string]any{}
+	for _, row := range latestTelemetryRows {
+		latestTelemetry[stringValue(row["sensorType"])] = map[string]any{
+			"sensorName": row["sensorName"],
+			"value":      row["value"],
+			"unit":       row["unit"],
+			"recordedAt": row["recordedAt"],
+			"zoneName":   row["zoneName"],
+		}
+	}
+
+	recentAlerts, err := s.repo.Query(ctx, `
+SELECT id, severity, source, title, message, raised_at
+FROM system_alerts
+WHERE status = 'active'
+ORDER BY raised_at DESC
+LIMIT 10`)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]any{
+		"counts": map[string]any{
+			"devicesTotal":   counts["devicesTotal"],
+			"devicesOnline":  counts["devicesOnline"],
+			"devicesOffline": counts["devicesOffline"],
+			"plantsTotal":    counts["plantsTotal"],
+			"activeAlerts":   counts["activeAlerts"],
+			"zonesTotal":     counts["zonesTotal"],
+		},
+		"plantHealth":     plantHealth,
+		"latestTelemetry": latestTelemetry,
+		"activeAlerts":    recentAlerts,
+	}, nil
+}
+
+func (s *DomainService) evaluateAutomationRuleRecord(ctx context.Context, rule repositories.Record, id string, evaluationContext map[string]any, commit bool, evaluatedBy any) (repositories.Record, error) {
 	mode := "dry_run"
 	if commit {
 		mode = "committed"
@@ -629,7 +840,7 @@ RETURNING *`,
 		mustJSON(evaluationContext),
 		mustJSON(result),
 		mustJSON(actions),
-		nullableString(body, "evaluatedBy"),
+		evaluatedBy,
 	)
 	if err != nil {
 		return nil, err
@@ -695,7 +906,7 @@ RETURNING *`,
 
 func (s *DomainService) GetDeviceProvisioning(ctx context.Context, deviceID string) (repositories.Record, error) {
 	return s.repo.QueryOne(ctx, `
-SELECT id, device_id, status, provisioning_config, expires_at, claimed_at, metadata, created_at, updated_at
+SELECT id, device_id, status, provisioning_config, expires_at, claimed_at, claim_attempts, last_claim_attempt_at, claimed_metadata, metadata, created_at, updated_at
 FROM device_provisioning_configs
 WHERE device_id = $1::uuid
 ORDER BY created_at DESC
@@ -741,7 +952,7 @@ created AS (
     COALESCE($4::timestamptz, now() + interval '7 days'),
     COALESCE($5::jsonb, '{}'::jsonb)
   FROM device_record
-  RETURNING *
+  RETURNING id, device_id, status, provisioning_config, expires_at, claimed_at, claim_attempts, last_claim_attempt_at, claimed_metadata, metadata, created_at, updated_at
 )
 SELECT * FROM created`,
 		deviceID,
@@ -774,7 +985,7 @@ SET status = $3,
     updated_at = now()
 WHERE id = $1::uuid
   AND device_id = $2::uuid
-RETURNING id, device_id, status, provisioning_config, expires_at, claimed_at, metadata, created_at, updated_at`,
+RETURNING id, device_id, status, provisioning_config, expires_at, claimed_at, claim_attempts, last_claim_attempt_at, claimed_metadata, metadata, created_at, updated_at`,
 		provisioningID,
 		deviceID,
 		status,
@@ -807,18 +1018,60 @@ RETURNING id, device_id, status, provisioning_config, expires_at, claimed_at, me
 	return record, nil
 }
 
-func (s *DomainService) ClaimDeviceProvisioning(ctx context.Context, token string) (repositories.Record, error) {
+func (s *DomainService) PreviewDeviceProvisioningClaim(ctx context.Context, token string) (repositories.Record, error) {
+	tokenHash := hashProvisioningToken(token)
+	return s.repo.QueryOne(ctx, `
+WITH expired AS (
+  UPDATE device_provisioning_configs
+  SET status = 'expired',
+      updated_at = now()
+  WHERE token_hash = $1
+    AND status = 'pending'
+    AND expires_at IS NOT NULL
+    AND expires_at <= now()
+  RETURNING 1
+)
+SELECT
+  dpc.id,
+  dpc.device_id,
+  d.name AS device_name,
+  d.device_uid,
+  d.device_type,
+  dpc.status,
+  dpc.provisioning_config,
+  dpc.expires_at,
+  dpc.claimed_at,
+  dpc.claim_attempts,
+  dpc.last_claim_attempt_at,
+  dpc.claimed_metadata,
+  dpc.metadata,
+  dpc.created_at,
+  dpc.updated_at
+FROM device_provisioning_configs dpc
+LEFT JOIN devices d ON d.id = dpc.device_id
+WHERE dpc.token_hash = $1
+ORDER BY dpc.created_at DESC
+LIMIT 1`,
+		tokenHash,
+	)
+}
+
+func (s *DomainService) ClaimDeviceProvisioning(ctx context.Context, token string, body map[string]any) (repositories.Record, error) {
 	tokenHash := hashProvisioningToken(token)
 	record, err := s.repo.QueryOne(ctx, `
 UPDATE device_provisioning_configs
 SET status = 'claimed',
     claimed_at = COALESCE(claimed_at, now()),
+    claim_attempts = claim_attempts + 1,
+    last_claim_attempt_at = now(),
+    claimed_metadata = claimed_metadata || $2::jsonb,
     updated_at = now()
 WHERE token_hash = $1
   AND status = 'pending'
   AND (expires_at IS NULL OR expires_at > now())
-RETURNING *`,
+RETURNING id, device_id, status, provisioning_config, expires_at, claimed_at, claim_attempts, last_claim_attempt_at, claimed_metadata, metadata, created_at, updated_at`,
 		tokenHash,
+		jsonField(body, "claimMetadata"),
 	)
 	if err != nil {
 		return nil, err
@@ -1836,10 +2089,13 @@ func (s *DomainService) provisioningClaimURL(token string) string {
 		return ""
 	}
 	encoded := url.QueryEscape(token)
+	if s.publicWebURL != "" {
+		return s.publicWebURL + "/provisioning/claim?token=" + encoded
+	}
 	if s.publicAPIURL != "" {
 		return s.publicAPIURL + "/api/provisioning/claim?token=" + encoded
 	}
-	return "/api/provisioning/claim?token=" + encoded
+	return "/provisioning/claim?token=" + encoded
 }
 
 func generateProvisioningToken() (string, string, error) {
@@ -1920,6 +2176,43 @@ func nullableNumber(body map[string]any, key string) any {
 	default:
 		return nil
 	}
+}
+
+func nullableInt(body map[string]any, key string) any {
+	value, ok := body[key]
+	if !ok || value == nil {
+		return nil
+	}
+	switch typed := value.(type) {
+	case float64:
+		if typed == math.Trunc(typed) {
+			return int(typed)
+		}
+	case int:
+		return typed
+	case int64:
+		return typed
+	case json.Number:
+		parsed, err := typed.Int64()
+		if err == nil {
+			return parsed
+		}
+	}
+	return nil
+}
+
+func intField(body map[string]any, key string, fallback int) int {
+	value := nullableInt(body, key)
+	if value == nil {
+		return fallback
+	}
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int64:
+		return int(typed)
+	}
+	return fallback
 }
 
 func boolField(body map[string]any, key string, fallback bool) bool {

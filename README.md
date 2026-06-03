@@ -56,7 +56,6 @@ Intentionally not active by default:
 - real irrigation
 - pump automation
 - AI features
-- automatic rules scheduler
 - production kiosk lockdown
 - generic homelab monitoring inside this repository
 
@@ -177,6 +176,7 @@ mindmap
 
 - CRUD for plants and zones
 - zone target profiles with one active profile per zone
+- zone digital twin canvas with persisted free-positioned elements
 - manual plant health history
 - plant events
 - manual tasks and checklist status updates
@@ -189,7 +189,7 @@ mindmap
 - registered ESP32 devices
 - heartbeat and last-seen tracking
 - device capability model with manual enable/disable
-- device provisioning create, claim, revoke and expire flow
+- device provisioning create, QR claim, revoke and expire flow
 - token hashes stored server-side; raw provisioning token returned only once
 - sensor calibration records with confirm, retire and reopen states
 - telemetry, heartbeat, device status and OTA status ingestion over MQTT
@@ -199,8 +199,9 @@ mindmap
 - global system event timeline
 - system alerts with `active`, `acknowledged` and `resolved` states
 - manual alert/event creation in the Operations console
-- rules engine MVP for manual evaluation and safe actions only
-- no automatic scheduler and no physical actuation from rules
+- rules engine with manual evaluation and opt-in scheduler
+- scheduler actions are limited to safe alert/event/suggestion outputs
+- no physical actuation from rules
 
 ### Lighting
 

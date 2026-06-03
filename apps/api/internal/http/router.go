@@ -89,6 +89,8 @@ func registerDomainRoutes(router *gin.Engine, domain *handlers.DomainHandler) {
 	router.POST("/api/system/alerts/:id/resolve", domain.ResolveSystemAlert)
 	router.GET("/api/automation/rules", domain.ListAutomationRules)
 	router.POST("/api/automation/rules", domain.CreateAutomationRule)
+	router.GET("/api/automation/context", domain.GetAutomationContext)
+	router.POST("/api/automation/scheduler/run", domain.RunAutomationScheduler)
 	router.GET("/api/automation/rules/:id/evaluations", domain.ListAutomationRuleEvaluations)
 	router.POST("/api/automation/rules/:id/evaluate", domain.EvaluateAutomationRule)
 
@@ -100,6 +102,7 @@ func registerDomainRoutes(router *gin.Engine, domain *handlers.DomainHandler) {
 	router.GET("/api/devices/:id/provisioning", domain.GetDeviceProvisioning)
 	router.POST("/api/devices/:id/provisioning", domain.CreateDeviceProvisioning)
 	router.PATCH("/api/devices/:id/provisioning/:provisioningId", domain.UpdateDeviceProvisioning)
+	router.GET("/api/provisioning/claim", domain.PreviewDeviceProvisioningClaim)
 	router.POST("/api/provisioning/claim", domain.ClaimDeviceProvisioning)
 	router.GET("/api/telemetry/latest", domain.ListLatestSensorReadings)
 	router.GET("/api/sensors/:id/readings", domain.ListSensorReadings)

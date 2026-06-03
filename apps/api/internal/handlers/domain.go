@@ -312,6 +312,18 @@ func (h *DomainHandler) EvaluateAutomationRule(c *gin.Context) {
 	respondCreated(c, result, err)
 }
 
+func (h *DomainHandler) GetAutomationContext(c *gin.Context) {
+	result, err := h.service.BuildAutomationEvaluationContext(c.Request.Context())
+	respondOne(c, repositories.Record(result), err)
+}
+
+func (h *DomainHandler) RunAutomationScheduler(c *gin.Context) {
+	limit := 25
+	_, _ = fmt.Sscanf(c.DefaultQuery("limit", "25"), "%d", &limit)
+	result, err := h.service.RunScheduledAutomationRules(c.Request.Context(), limit)
+	respond(c, result, err)
+}
+
 func (h *DomainHandler) ListDevices(c *gin.Context) {
 	result, err := h.service.ListDevices(c.Request.Context())
 	respond(c, result, err)
@@ -368,6 +380,16 @@ func (h *DomainHandler) UpdateDeviceProvisioning(c *gin.Context) {
 	respondOne(c, result, err)
 }
 
+func (h *DomainHandler) PreviewDeviceProvisioningClaim(c *gin.Context) {
+	token := c.Query("token")
+	if token == "" {
+		JSONError(c, http.StatusBadRequest, "INVALID_REQUEST", "token is required")
+		return
+	}
+	result, err := h.service.PreviewDeviceProvisioningClaim(c.Request.Context(), token)
+	respondOne(c, result, err)
+}
+
 func (h *DomainHandler) ClaimDeviceProvisioning(c *gin.Context) {
 	body, ok := bindJSONMap(c)
 	if !ok {
@@ -375,10 +397,13 @@ func (h *DomainHandler) ClaimDeviceProvisioning(c *gin.Context) {
 	}
 	token, _ := body["token"].(string)
 	if token == "" {
+		token = c.Query("token")
+	}
+	if token == "" {
 		JSONError(c, http.StatusBadRequest, "INVALID_REQUEST", "token is required")
 		return
 	}
-	result, err := h.service.ClaimDeviceProvisioning(c.Request.Context(), token)
+	result, err := h.service.ClaimDeviceProvisioning(c.Request.Context(), token, body)
 	respondOne(c, result, err)
 }
 

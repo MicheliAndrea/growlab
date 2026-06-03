@@ -24,10 +24,11 @@ Verifiche leggere standard:
 - STEP 03B applicato dopo STEP 03 e prima di STEP 04
 - system_alerts usa solo stati active/acknowledged/resolved
 - system_events presente come timeline globale
-- rules engine MVP presente come valutazione manuale/dry-run senza scheduler automatico
+- rules engine presente con valutazione manuale, scheduler opt-in e dry-run/commit sicuro
+- scheduler rules limitato ad alert, system event e dashboard suggestion
 - STEP 06 espone handler sottili, service e repository per i moduli domain principali
 - provisioning device non espone token_hash
-- provisioning device supporta revoke/expire manuale senza cancellare storico
+- provisioning device supporta QR claim web, preview, revoke/expire manuale e audit claim senza cancellare storico
 - Plant Wiki coperta nel contratto OpenAPI e nelle rotte API
 - STEP 07 worker MQTT sottoscrive telemetry/heartbeat/status/ota status
 - devices.last_seen_at presente e aggiornato dal worker
@@ -41,6 +42,7 @@ Verifiche leggere standard:
 - STEP 09 light/dark/system mode implementato senza introdurre nuovo stack
 - STEP 09 pannello calibrazione include storico letture sensore con mini chart
 - STEP 09 console Operations include creazione/valutazione rules engine e storico valutazioni
+- STEP 09 console Operations include contesto automatico e run manuale scheduler delle regole dovute
 - STEP 09 pagina Devices include creazione manuale device capability oltre alla lista
 - STEP 09 pagina Devices include toggle manuale enable/disable capability
 - STEP 09 pannello calibrazione sensori include conferma, ritiro e riapertura calibrazioni
@@ -50,6 +52,7 @@ Verifiche leggere standard:
 - STEP 10 plant_status_history popolato su create/update plant health
 - STEP 10 plant image metadata supporta update manuale di growth stage, tags e growth_tracking
 - STEP 10 pagine dettaglio e form create/edit presenti per plants/zones
+- STEP 10 dettaglio zona include digital twin canvas persistito in `zone.metadata.digitalTwin`
 - STEP 10 Plant Wiki base visibile nel frontend
 - STEP 11 upload immagini usa multipart con validazione MIME/size
 - STEP 11 immagini salvate su filesystem, non nel DB

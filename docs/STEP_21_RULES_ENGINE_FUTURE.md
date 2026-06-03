@@ -2,13 +2,13 @@
 
 ## Stato
 
-MVP consultivo implementato.
+Scheduler consultivo implementato.
 
-Il rules engine completo resta futuro: niente scheduler automatico, niente AI e niente azioni fisiche.
+Il rules engine automatico e presente come scheduler opt-in. Restano esclusi AI e azioni fisiche.
 
 ## Obiettivo
 
-Creare in futuro un motore regole consultivo per generare alert e suggerimenti, senza eseguire azioni fisiche automatiche.
+Gestire un motore regole consultivo per generare alert e suggerimenti, senza eseguire azioni fisiche automatiche.
 
 ## Principio fondamentale
 
@@ -59,6 +59,8 @@ Endpoint implementati:
 ```text
 GET /api/automation/rules
 POST /api/automation/rules
+GET /api/automation/context
+POST /api/automation/scheduler/run
 GET /api/automation/rules/{id}/evaluations
 POST /api/automation/rules/{id}/evaluate
 ```
@@ -68,6 +70,29 @@ La UI e nella pagina:
 ```text
 /operations
 ```
+
+Lo scheduler runtime e controllato da env:
+
+```text
+GROWLAB_RULES_SCHEDULER_ENABLED=false
+GROWLAB_RULES_SCHEDULER_TICK=30s
+GROWLAB_RULES_SCHEDULER_BATCH_LIMIT=25
+```
+
+Campi scheduler su `automation_rules`:
+
+```text
+trigger_mode
+schedule_interval_seconds
+scheduler_commit
+cooldown_seconds
+next_run_at
+last_scheduler_run_at
+scheduler_status
+scheduler_error
+```
+
+Il context automatico include contatori sistema, health piante, alert attivi e ultime letture per tipo sensore.
 
 ## Struttura futura suggerita
 
@@ -102,6 +127,10 @@ Funzioni implementate:
 
 - lista regole;
 - creazione regola;
+- trigger manuale o schedulato;
+- intervallo schedulazione;
+- cooldown anti-ripetizione;
+- commit automatico limitato alle azioni sicure;
 - visualizza ultima valutazione;
 - storico valutazioni;
 - test manuale regola;
@@ -109,11 +138,12 @@ Funzioni implementate:
 
 ## Priorità
 
-V2/Future.
+Implementato come MVP avanzato.
 
-Prima devono essere stabili:
+Restano future:
 
-- dati sensori;
-- system_alerts;
-- system_events;
-- target zone profiles.
+- DSL regole piu tipizzata;
+- editor visuale condizioni/azioni;
+- scheduler distribuito con lock cross-process dedicato;
+- policy/rate limit piu fine per alert ripetuti;
+- integrazione AI, se progettata esplicitamente.

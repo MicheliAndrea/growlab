@@ -11,19 +11,27 @@ import (
 )
 
 type AutomationRule struct {
-	ID              pgtype.UUID        `db:"id" json:"id"`
-	Name            string             `db:"name" json:"name"`
-	Slug            string             `db:"slug" json:"slug"`
-	Description     pgtype.Text        `db:"description" json:"description"`
-	Enabled         bool               `db:"enabled" json:"enabled"`
-	Severity        string             `db:"severity" json:"severity"`
-	ConditionConfig []byte             `db:"condition_config" json:"condition_config"`
-	ActionConfig    []byte             `db:"action_config" json:"action_config"`
-	Metadata        []byte             `db:"metadata" json:"metadata"`
-	LastEvaluatedAt pgtype.Timestamptz `db:"last_evaluated_at" json:"last_evaluated_at"`
-	LastMatchedAt   pgtype.Timestamptz `db:"last_matched_at" json:"last_matched_at"`
-	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	ID                      pgtype.UUID        `db:"id" json:"id"`
+	Name                    string             `db:"name" json:"name"`
+	Slug                    string             `db:"slug" json:"slug"`
+	Description             pgtype.Text        `db:"description" json:"description"`
+	Enabled                 bool               `db:"enabled" json:"enabled"`
+	Severity                string             `db:"severity" json:"severity"`
+	ConditionConfig         []byte             `db:"condition_config" json:"condition_config"`
+	ActionConfig            []byte             `db:"action_config" json:"action_config"`
+	Metadata                []byte             `db:"metadata" json:"metadata"`
+	LastEvaluatedAt         pgtype.Timestamptz `db:"last_evaluated_at" json:"last_evaluated_at"`
+	LastMatchedAt           pgtype.Timestamptz `db:"last_matched_at" json:"last_matched_at"`
+	CreatedAt               pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	TriggerMode             string             `db:"trigger_mode" json:"trigger_mode"`
+	ScheduleIntervalSeconds pgtype.Int4        `db:"schedule_interval_seconds" json:"schedule_interval_seconds"`
+	SchedulerCommit         bool               `db:"scheduler_commit" json:"scheduler_commit"`
+	CooldownSeconds         int32              `db:"cooldown_seconds" json:"cooldown_seconds"`
+	NextRunAt               pgtype.Timestamptz `db:"next_run_at" json:"next_run_at"`
+	LastSchedulerRunAt      pgtype.Timestamptz `db:"last_scheduler_run_at" json:"last_scheduler_run_at"`
+	SchedulerStatus         string             `db:"scheduler_status" json:"scheduler_status"`
+	SchedulerError          pgtype.Text        `db:"scheduler_error" json:"scheduler_error"`
 }
 
 type AutomationRuleEvaluation struct {
@@ -103,6 +111,9 @@ type DeviceProvisioningConfig struct {
 	Metadata           []byte             `db:"metadata" json:"metadata"`
 	CreatedAt          pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	ClaimAttempts      int32              `db:"claim_attempts" json:"claim_attempts"`
+	LastClaimAttemptAt pgtype.Timestamptz `db:"last_claim_attempt_at" json:"last_claim_attempt_at"`
+	ClaimedMetadata    []byte             `db:"claimed_metadata" json:"claimed_metadata"`
 }
 
 type FirmwareChannel struct {

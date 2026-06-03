@@ -2,7 +2,7 @@
 
 ## Stato
 
-Implementata nella forma minimale create/claim.
+Implementata con create, QR claim web, preview, revoke ed expire.
 
 ## Obiettivo
 
@@ -14,7 +14,9 @@ Semplificare aggiunta di nuovi ESP32.
 2. Definisce `provisioningConfig`, metadata ed eventuale scadenza.
 3. Il backend genera un token una sola volta e salva solo l'hash.
 4. L'interfaccia mostra claim URL, token, QR code e configurazione.
-5. Il token può essere marcato come claimed via endpoint dedicato.
+5. Il QR punta alla web app `/provisioning/claim?token=...`.
+6. La pagina claim mostra preview sicura e conferma il claim.
+7. Il token può essere revocato, marcato expired o claimed via endpoint dedicati.
 
 ## Config generata
 
@@ -40,13 +42,26 @@ Esempio:
 
 ## QR code provisioning
 
-Il claim URL attuale può contenere:
+Il claim URL contiene:
 
 - token di claim;
-- endpoint di claim;
-- eventuali parametri di bootstrap.
+- pagina web di claim;
+- eventuali parametri di bootstrap futuri.
 
-La web app genera anche un QR SVG scansionabile dal claim URL.
+La web app genera un QR SVG scansionabile dal claim URL. Il backend espone:
+
+```text
+GET /api/provisioning/claim?token=...
+POST /api/provisioning/claim
+```
+
+La preview non espone `token_hash`. Il claim salva audit metadata:
+
+```text
+claim_attempts
+last_claim_attempt_at
+claimed_metadata
+```
 
 ## Device capability model
 
@@ -69,4 +84,11 @@ Ogni device deve dichiarare cosa supporta:
 
 ## Priorità
 
-Alta, ma il flusso base e già operativo.
+Implementato come MVP avanzato.
+
+Restano future:
+
+- enrollment diretto da firmware ESP32;
+- rotazione automatica credenziali MQTT per device;
+- QR fisici stampabili in batch;
+- policy di revoca automatica piu rigida.

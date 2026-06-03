@@ -16,6 +16,10 @@ import {
   StatusBadge,
 } from "@/components/dashboard/ui";
 import { ZoneProfileForm } from "@/components/zones/zone-profile-form";
+import {
+  ZoneDigitalTwinEditor,
+  ZoneDigitalTwinPreview,
+} from "@/components/zones/zone-digital-twin";
 import { ZoneLayoutEditor } from "@/components/zones/zone-layout-editor";
 import { ZoneLayoutPreview } from "@/components/zones/zone-layout-preview";
 import {
@@ -154,10 +158,28 @@ export function ZoneDetail({ zoneId }: { zoneId: string }) {
 
       {zone.data ? (
         <DataPanel
+          title="Digital twin"
+          description="Free-positioned zone canvas persisted in metadata."
+        >
+          <ZoneDigitalTwinPreview zone={zone.data} plants={plants.data ?? []} />
+        </DataPanel>
+      ) : null}
+
+      {zone.data ? (
+        <DataPanel
           title="Layout editor"
           description="Persist the zone layout in metadata."
         >
           <ZoneLayoutEditor zone={zone.data} plants={plants.data ?? []} />
+        </DataPanel>
+      ) : null}
+
+      {zone.data ? (
+        <DataPanel
+          title="Digital twin editor"
+          description="Advanced spatial metadata for zone layout, devices and notes."
+        >
+          <ZoneDigitalTwinEditor zone={zone.data} plants={plants.data ?? []} />
         </DataPanel>
       ) : null}
 

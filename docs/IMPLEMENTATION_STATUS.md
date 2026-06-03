@@ -922,6 +922,34 @@ pnpm --filter @growlab/web exec tsc --noEmit --pretty false
 git diff --check -- apps/web/app/plants/page.tsx apps/web/app/zones/page.tsx apps/web/app/devices/page.tsx apps/web/app/images/page.tsx apps/web/app/firmware/page.tsx apps/web/components/operations/operations-console.tsx apps/web/components/dashboard/list-filters.tsx apps/web/lib/persistent-state.ts docs/NEXT_STEPS.md docs/IMPLEMENTATION_STATUS.md
 ```
 
+## Rules Scheduler, Digital Twin, QR Provisioning
+
+Implementata la tranche avanzata richiesta su automazione consultiva, editor spaziale zona e provisioning QR.
+
+- Aggiunta migrazione `database/migrations/000007_automation_scheduler_qr_provisioning.sql`.
+- `automation_rules` ora supporta `trigger_mode`, `schedule_interval_seconds`, `scheduler_commit`, `cooldown_seconds`, `next_run_at`, `last_scheduler_run_at`, `scheduler_status` e `scheduler_error`.
+- Aggiunto scheduler API opt-in con `GROWLAB_RULES_SCHEDULER_ENABLED=false` di default.
+- Lo scheduler valuta solo regole `scheduled` dovute e rispetta cooldown e batch limit.
+- Le azioni automatiche restano limitate a `create_alert`, `create_system_event` e `show_dashboard_suggestion`.
+- Aggiunto context automatico rules engine con conteggi sistema, health piante, alert attivi e ultime letture per tipo sensore.
+- Aggiunti endpoint `GET /api/automation/context` e `POST /api/automation/scheduler/run`.
+- La console `/operations` permette di creare regole manuali o schedulate, configurare interval/cooldown/commit sicuro, vedere context automatico e lanciare un run delle regole dovute.
+- Aggiunto digital twin avanzato in `zone.metadata.digitalTwin` con canvas a coordinate libere, tipi elemento, layer, dimensioni, rotazione, colore, note e associazione pianta opzionale.
+- Il dettaglio zona mostra preview digital twin ed editor dedicato senza introdurre nuove tabelle.
+- Il provisioning QR ora genera claim URL verso `/provisioning/claim?token=...` usando `GROWLAB_PUBLIC_WEB_URL`.
+- Aggiunta pagina web claim QR con preview sicura e conferma claim.
+- Aggiunto `GET /api/provisioning/claim?token=...` per preview senza esporre `token_hash`.
+- Il claim provisioning traccia `claim_attempts`, `last_claim_attempt_at` e `claimed_metadata`.
+
+Verifiche leggere eseguite:
+
+```bash
+make openapi-generate
+make sqlc
+GOCACHE=/tmp/growlab-go-build go list ./apps/api/...
+pnpm --filter @growlab/web exec tsc --noEmit --pretty false
+```
+
 ## STEP 22 - Sensor Calibration Wizard
 
 Aggiunta una procedura guidata minima dentro il pannello calibrazioni.

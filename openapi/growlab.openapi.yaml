@@ -645,6 +645,41 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
 
+  /api/automation/context:
+    get:
+      tags: [Automation]
+      operationId: getAutomationContext
+      responses:
+        "200":
+          description: Current automatic evaluation context.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JsonObject"
+
+  /api/automation/scheduler/run:
+    post:
+      tags: [Automation]
+      operationId: runAutomationScheduler
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+      responses:
+        "200":
+          description: Scheduled automation rules evaluated.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AutomationSchedulerRunResult"
+
   /api/automation/rules/{id}/evaluations:
     get:
       tags: [Automation]
@@ -848,6 +883,26 @@ paths:
           $ref: "#/components/responses/NotFound"
 
   /api/provisioning/claim:
+    get:
+      tags: [Devices]
+      operationId: previewDeviceProvisioningClaim
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Device provisioning claim preview.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceProvisioningConfig"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
     post:
       tags: [Devices]
       operationId: claimDeviceProvisioning
@@ -2008,6 +2063,10 @@ components:
           conditionConfig,
           actionConfig,
           metadata,
+          triggerMode,
+          schedulerCommit,
+          cooldownSeconds,
+          schedulerStatus,
           createdAt,
           updatedAt,
         ]
@@ -2032,6 +2091,34 @@ components:
           $ref: "#/components/schemas/JsonObject"
         metadata:
           $ref: "#/components/schemas/JsonObject"
+        triggerMode:
+          type: string
+          enum: [manual, scheduled]
+        scheduleIntervalSeconds:
+          type: integer
+          nullable: true
+          minimum: 30
+          maximum: 86400
+        schedulerCommit:
+          type: boolean
+        cooldownSeconds:
+          type: integer
+          minimum: 0
+          maximum: 604800
+        nextRunAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastSchedulerRunAt:
+          type: string
+          format: date-time
+          nullable: true
+        schedulerStatus:
+          type: string
+          enum: [idle, due, running, matched, not_matched, failed]
+        schedulerError:
+          type: string
+          nullable: true
         lastEvaluatedAt:
           type: string
           format: date-time
@@ -2069,6 +2156,48 @@ components:
           $ref: "#/components/schemas/JsonObject"
         metadata:
           $ref: "#/components/schemas/JsonObject"
+        triggerMode:
+          type: string
+          enum: [manual, scheduled]
+          default: manual
+        scheduleIntervalSeconds:
+          type: integer
+          nullable: true
+          minimum: 30
+          maximum: 86400
+        schedulerCommit:
+          type: boolean
+          default: false
+        cooldownSeconds:
+          type: integer
+          minimum: 0
+          maximum: 604800
+          default: 0
+        nextRunAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    AutomationSchedulerRunResult:
+      type: object
+      required: [ruleId, status]
+      properties:
+        ruleId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [matched, not_matched, failed]
+        evaluationId:
+          type: string
+          format: uuid
+          nullable: true
+        matched:
+          type: boolean
+          nullable: true
+        error:
+          type: string
+          nullable: true
 
     AutomationRuleEvaluation:
       type: object
@@ -2241,6 +2370,15 @@ components:
           type: string
           format: uuid
           nullable: true
+        deviceName:
+          type: string
+          nullable: true
+        deviceUid:
+          type: string
+          nullable: true
+        deviceType:
+          type: string
+          nullable: true
         status:
           type: string
           enum: [pending, claimed, expired, revoked]
@@ -2254,6 +2392,15 @@ components:
           type: string
           format: date-time
           nullable: true
+        claimAttempts:
+          type: integer
+          nullable: true
+        lastClaimAttemptAt:
+          type: string
+          format: date-time
+          nullable: true
+        claimedMetadata:
+          $ref: "#/components/schemas/JsonObject"
         metadata:
           $ref: "#/components/schemas/JsonObject"
         claimToken:
@@ -2287,6 +2434,8 @@ components:
       properties:
         token:
           type: string
+        claimMetadata:
+          $ref: "#/components/schemas/JsonObject"
 
     DeviceProvisioningUpdateRequest:
       type: object

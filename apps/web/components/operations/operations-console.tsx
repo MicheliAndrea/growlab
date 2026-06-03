@@ -33,12 +33,14 @@ import {
   createSystemAlertEntry,
   createSystemEventEntry,
   evaluateAutomationRuleEntry,
+  fetchAutomationContext,
   fetchAutomationRuleEvaluations,
   fetchAutomationRules,
   fetchSystemAlerts,
   fetchSystemEvents,
   queryKeys,
   resolveSystemAlertEntry,
+  runAutomationSchedulerEntry,
 } from "@/lib/queries";
 import {
   type AutomationRule,
@@ -92,6 +94,11 @@ export function OperationsConsole() {
   const rules = useQuery({
     queryKey: queryKeys.automationRules,
     queryFn: fetchAutomationRules,
+    refetchInterval: poll,
+  });
+  const automationContext = useQuery({
+    queryKey: ["automation-context"],
+    queryFn: fetchAutomationContext,
     refetchInterval: poll,
   });
   const activeRuleId = selectedRuleId || rules.data?.[0]?.id || "";
@@ -219,6 +226,18 @@ export function OperationsConsole() {
     },
   });
 
+  const schedulerRunMutation = useMutation({
+    mutationFn: () => runAutomationSchedulerEntry(25),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.automationRules,
+      });
+      await queryClient.invalidateQueries({ queryKey: ["automation-rules"] });
+      await queryClient.invalidateQueries({ queryKey: ["system-alerts"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.systemEvents });
+    },
+  });
+
   return (
     <div className="grid gap-6">
       <PageHeader
@@ -309,6 +328,56 @@ export function OperationsConsole() {
           />
         </DataPanel>
       </section>
+
+      <DataPanel
+        title="Automation scheduler"
+        description="Automatic context and due scheduled-rule runner."
+      >
+        <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
+          <div className="grid gap-3">
+            {automationContext.isLoading ? (
+              <DataNotice state="loading" />
+            ) : null}
+            {automationContext.isError ? <DataNotice state="error" /> : null}
+            {schedulerRunMutation.error ? (
+              <p className="text-xs text-red-600 dark:text-red-300">
+                {schedulerRunMutation.error.message}
+              </p>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              disabled={schedulerRunMutation.isPending}
+              onClick={() => schedulerRunMutation.mutate()}
+            >
+              <RefreshCcw className="h-4 w-4" aria-hidden="true" />
+              Run due rules now
+            </Button>
+            {schedulerRunMutation.data ? (
+              <RowList>
+                {schedulerRunMutation.data.map((result) => (
+                  <Row
+                    key={`${result.ruleId}-${result.evaluationId ?? result.status}`}
+                    title={result.status}
+                    detail={result.ruleId}
+                    meta={<StatusBadge value={result.status} />}
+                  />
+                ))}
+              </RowList>
+            ) : (
+              <EmptyState
+                title="No scheduler run yet"
+                detail="This manually evaluates due scheduled rules only."
+              />
+            )}
+          </div>
+          <Textarea
+            readOnly
+            className="min-h-52 font-mono text-xs"
+            value={JSON.stringify(automationContext.data ?? {}, null, 2)}
+          />
+        </div>
+      </DataPanel>
 
       <section className="grid gap-4 xl:grid-cols-[1fr_1.1fr]">
         <DataPanel title="Active alerts" description="Current alert queue.">
@@ -757,7 +826,7 @@ function SystemEventForm({
 
 const defaultRuleCondition = JSON.stringify(
   {
-    fact: "soilMoisture",
+    fact: "latestTelemetry.soil_moisture.value",
     operator: "lt",
     value: 35,
   },
@@ -789,6 +858,15 @@ const defaultEvaluationContext = JSON.stringify(
     temperature: 24.5,
     humidity: 58,
     soilMoisture: 28,
+    latestTelemetry: {
+      soil_moisture: {
+        value: 28,
+      },
+    },
+    counts: {
+      activeAlerts: 0,
+      devicesOffline: 0,
+    },
     device: {
       status: "online",
     },
@@ -811,6 +889,11 @@ function AutomationRuleForm({
   const [description, setDescription] = React.useState("");
   const [enabled, setEnabled] = React.useState(true);
   const [severity, setSeverity] = React.useState<SystemSeverity>("warning");
+  const [triggerMode, setTriggerMode] = React.useState("manual");
+  const [scheduleIntervalSeconds, setScheduleIntervalSeconds] =
+    React.useState(300);
+  const [schedulerCommit, setSchedulerCommit] = React.useState(false);
+  const [cooldownSeconds, setCooldownSeconds] = React.useState(900);
   const [conditionConfig, setConditionConfig] =
     React.useState(defaultRuleCondition);
   const [actionConfig, setActionConfig] = React.useState(defaultRuleActions);
@@ -833,6 +916,11 @@ function AutomationRuleForm({
         description: description.trim() || null,
         enabled,
         severity,
+        triggerMode: triggerMode as AutomationRuleCreateRequest["triggerMode"],
+        scheduleIntervalSeconds:
+          triggerMode === "scheduled" ? scheduleIntervalSeconds : null,
+        schedulerCommit,
+        cooldownSeconds,
         conditionConfig:
           parseJsonObject(conditionConfig, "condition config") ?? {},
         actionConfig: parseJsonObject(actionConfig, "action config") ?? {},
@@ -846,6 +934,10 @@ function AutomationRuleForm({
       setDescription("");
       setEnabled(true);
       setSeverity("warning");
+      setTriggerMode("manual");
+      setScheduleIntervalSeconds(300);
+      setSchedulerCommit(false);
+      setCooldownSeconds(900);
       setConditionConfig(defaultRuleCondition);
       setActionConfig(defaultRuleActions);
       setMetadata("{}");
@@ -911,6 +1003,61 @@ function AutomationRuleForm({
             type="checkbox"
           />
           Enabled
+        </label>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-4">
+        <div>
+          <Label htmlFor="rule-trigger-mode">Trigger</Label>
+          <select
+            id="rule-trigger-mode"
+            className={selectClass}
+            value={triggerMode}
+            onChange={(event) => setTriggerMode(event.target.value)}
+          >
+            <option value="manual">manual</option>
+            <option value="scheduled">scheduled</option>
+          </select>
+        </div>
+        <div>
+          <Label htmlFor="rule-schedule-interval">Interval seconds</Label>
+          <Input
+            id="rule-schedule-interval"
+            className="mt-2"
+            type="number"
+            min={30}
+            max={86400}
+            value={scheduleIntervalSeconds}
+            onChange={(event) =>
+              setScheduleIntervalSeconds(
+                Number.parseInt(event.target.value || "300", 10),
+              )
+            }
+            disabled={triggerMode !== "scheduled"}
+          />
+        </div>
+        <div>
+          <Label htmlFor="rule-cooldown">Cooldown seconds</Label>
+          <Input
+            id="rule-cooldown"
+            className="mt-2"
+            type="number"
+            min={0}
+            max={604800}
+            value={cooldownSeconds}
+            onChange={(event) =>
+              setCooldownSeconds(Number.parseInt(event.target.value || "0", 10))
+            }
+          />
+        </div>
+        <label className="flex h-16 items-end gap-2 pb-2 text-sm">
+          <input
+            checked={schedulerCommit}
+            onChange={(event) => setSchedulerCommit(event.target.checked)}
+            type="checkbox"
+            disabled={triggerMode !== "scheduled"}
+          />
+          Commit safe actions
         </label>
       </div>
 
@@ -1077,9 +1224,14 @@ function AutomationRuleRunner({
             </span>
             <SeverityBadge value={selectedRule?.severity} />
             <StatusBadge value={selectedRule?.enabled ? "active" : "offline"} />
+            <StatusBadge value={selectedRule?.triggerMode} />
+            <StatusBadge value={selectedRule?.schedulerStatus} />
           </div>
           <div className="truncate text-xs text-muted-foreground">
             {selectedRule?.description ?? selectedRule?.slug}
+            {selectedRule?.nextRunAt
+              ? ` - next run ${formatDateTime(selectedRule.nextRunAt)}`
+              : ""}
           </div>
         </div>
 

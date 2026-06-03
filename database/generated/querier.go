@@ -49,6 +49,7 @@ type Querier interface {
 	ListDeviceHeartbeats(ctx context.Context, arg ListDeviceHeartbeatsParams) ([]DeviceHeartbeat, error)
 	ListDeviceModules(ctx context.Context, deviceID pgtype.UUID) ([]DeviceModule, error)
 	ListDevicesByZone(ctx context.Context, zoneID pgtype.UUID) ([]Device, error)
+	ListDueScheduledAutomationRules(ctx context.Context, limit int32) ([]AutomationRule, error)
 	ListFirmwareVersionsByDeviceType(ctx context.Context, deviceType string) ([]FirmwareVersion, error)
 	ListGrowAreas(ctx context.Context) ([]GrowArea, error)
 	ListIrrigationSystemsByZone(ctx context.Context, zoneID pgtype.UUID) ([]IrrigationSystem, error)
@@ -75,6 +76,7 @@ type Querier interface {
 	ListZonesByGrowArea(ctx context.Context, growAreaID pgtype.UUID) ([]Zone, error)
 	TouchDeviceLastSeen(ctx context.Context, arg TouchDeviceLastSeenParams) error
 	TouchDeviceLastSeenByUID(ctx context.Context, arg TouchDeviceLastSeenByUIDParams) error
+	UpdateAutomationRuleScheduleState(ctx context.Context, arg UpdateAutomationRuleScheduleStateParams) (AutomationRule, error)
 	UpdateOtaJobStatus(ctx context.Context, arg UpdateOtaJobStatusParams) error
 	UpdateSystemAlertStatus(ctx context.Context, arg UpdateSystemAlertStatusParams) (SystemAlert, error)
 }
