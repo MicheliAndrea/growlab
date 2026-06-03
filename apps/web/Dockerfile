@@ -21,7 +21,8 @@ COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY --from=deps /app/packages/openapi-client/node_modules ./packages/openapi-client/node_modules
 COPY . .
 
-RUN pnpm --filter @growlab/web build
+RUN pnpm --filter @growlab/openapi-client generate && \
+    pnpm --filter @growlab/web build
 
 FROM node:22-alpine AS runner
 
