@@ -8,8 +8,7 @@ export async function growlabFetch<TResponse>(
   input: string,
   init?: RequestInit,
 ): Promise<TResponse> {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
   const url = baseUrl ? new URL(input, baseUrl).toString() : input;
   const isFormData =
     typeof FormData !== "undefined" && init?.body instanceof FormData;

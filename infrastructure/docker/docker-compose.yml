@@ -5,10 +5,15 @@ services:
     build:
       context: ../..
       dockerfile: apps/web/Dockerfile
+      args:
+        INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://growlab-api:8080}
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-}
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-GrowLab}
     image: growlab-web:local
     container_name: growlab-web
     environment:
-      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080}
+      INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://growlab-api:8080}
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-}
       NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-GrowLab}
     ports:
       - "${GROWLAB_LAN_BIND:-127.0.0.1}:3000:3000"
